@@ -1,64 +1,69 @@
-const http = require('http');
-const fs = require('fs');
+﻿require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
 const path = require('path');
 
-let PORT = parseInt(process.env.PORT, 10) || 3000;
+const customerRoutes = require('./routes/customerRoutes');
+const transactionRoutes = require('./routes/transactionRoutes');
+const { getDashboardSummary } = require('./controllers/transactionController');
 
-const MIME_TYPES = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
-};
+const app = express();
+const PORT = parseInt(process.env.PORT, 10) || 5000;
 
-const createServer = (port) => {
-  const server = http.createServer((req, res) => {
-    let filePath = path.join(__dirname, req.url === '/' ? 'landing.html' : req.url);
-    const ext = path.extname(filePath).toLowerCase();
-    
-    let contentType = MIME_TYPES[ext] || 'application/octet-stream';
+// ── Middleware ─────────────────────────────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-    fs.readFile(filePath, (error, content) => {
-      if (error) {
-        if (error.code === 'ENOENT') {
-          // Fallback to index.html for SPA routing
-          fs.readFile(path.join(__dirname, 'index.html'), (err, indexContent) => {
-            if (err) {
-              res.writeHead(500);
-              res.end('Server Error');
-            } else {
-              res.writeHead(200, { 'Content-Type': 'text/html' });
-              res.end(indexContent, 'utf-8');
-            }
-          });
-        } else {
-          res.writeHead(500);
-          res.end(`Server Error: ${error.code}`);
-        }
-      } else {
-        res.writeHead(200, { 'Content-Type': contentType });
-        res.end(content, 'utf-8');
-      }
-    });
-  });
+// ── API Routes ─────────────────────────────────────────────────────────────────
+app.use('/api/customers', customerRoutes);
+app.use('/api/transactions', transactionRoutes);
 
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.warn(`⚠️ Port ${port} is in use. Retrying on port ${port + 1}...`);
-      createServer(port + 1);
-    } else {
-      console.error('Server error:', err);
-    }
-  });
+// Dashboard summary shortcut route
+app.get('/api/dashboard/summary', getDashboardSummary);
 
-  server.listen(port, () => {
-    console.log(`🚀 iKhataPro server running at http://localhost:${port}`);
-    console.log(`📱 Mobile & Desktop web app ready!`);
-  });
-};
+// ── Health Check ───────────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, message: 'iKhataPro API is running ✅', timestamp: new Date().toISOString() });
+});
 
-createServer(PORT);
+// ── Serve public/ (new standalone dashboard) ───────────────────────────────────
+app.use('/dashboard', express.static(path.join(__dirname, 'public')));
+
+// ── Serve existing root-level frontend (legacy SPA) ────────────────────────────
+app.use(express.static(__dirname, {
+  index: 'landing.html',
+  extensions: ['html'],
+}));
+
+// Fallback for SPA routing — serve landing.html for unmatched routes
+app.get('*', (req, res) => {
+  // If the request looks like an API call, return 404 JSON
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ success: false, error: 'API endpoint not found.' });
+  }
+  res.sendFile(path.join(__dirname, 'landing.html'));
+});
+
+// ── Start Server ───────────────────────────────────────────────────────────────
+const server = app.listen(PORT, () => {
+  console.log('');
+  console.log('🚀 iKhataPro Express Server');
+  console.log('────────────────────────────────────────');
+  console.log(`   App:      http://localhost:${PORT}`);
+  console.log(`   Dashboard: http://localhost:${PORT}/dashboard`);
+  console.log(`   API Base:  http://localhost:${PORT}/api`);
+  console.log(`   Health:    http://localhost:${PORT}/api/health`);
+  console.log('────────────────────────────────────────');
+  console.log('');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use. Set a different PORT in .env`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});
