@@ -844,6 +844,51 @@
       return target;
     }
 
+    registerNewBusiness(formData) {
+      const bId = 'BUS_' + Date.now();
+      const rawSlug = (formData.shopName || 'my-shop')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const slug = rawSlug || ('shop-' + Date.now());
+
+      const newBus = {
+        id: bId,
+        name: formData.shopName || 'New Shop',
+        ownerName: formData.fullName || 'Shop Owner',
+        username: formData.username || ('user' + Math.floor(Math.random() * 1000)),
+        email: formData.email || '',
+        mobile: formData.mobile || '',
+        passwordHash: formData.password || 'Pass123!',
+        slug: slug,
+        businessType: formData.businessType || 'Retail Shop',
+        city: formData.city || 'Mathura',
+        state: formData.state || 'Uttar Pradesh',
+        address: formData.shopAddress || '',
+        pincode: formData.pincode || '',
+        gstin: formData.gstin || '',
+        logo: formData.logo || '🏪',
+        currency: 'INR',
+        subscriptionPlan: 'PRO'
+      };
+
+      if (!Array.isArray(this.state.businesses)) {
+        this.state.businesses = [];
+      }
+      this.state.businesses.push(newBus);
+
+      this.state.currentSession = {
+        isAuthenticated: true,
+        user: { name: newBus.ownerName, username: newBus.username },
+        businessId: newBus.id,
+        workspaceSlug: newBus.slug
+      };
+
+      this.logAudit('BUSINESS_REGISTER', 'Tenant', newBus.id, `Created workspace ${newBus.name} (${newBus.slug})`);
+      this.saveState();
+      return newBus;
+    }
+
     // Double-Submit / Idempotency Guard
     isDuplicateTransaction(token) {
       if (!token) return false;
