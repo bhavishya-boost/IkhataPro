@@ -1,0 +1,231 @@
+/* iKhataPro Top 7 Features Stylesheet */
+
+/* PIN Security Pad */
+.pin-pad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 260px;
+  margin: 20px auto 0;
+}
+
+.pin-digit-btn {
+  height: 54px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.pin-digit-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+}
+
+.pin-dots-display {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.pin-dot.filled {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Cash Gullak Counter Grid */
+.gullak-counter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.gullak-note-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+}
+
+.gullak-note-label {
+  font-weight: 800;
+  font-size: 1rem;
+  width: 70px;
+}
+
+/* Credit Freeze & Bad Debt Warning Banner */
+.credit-freeze-banner {
+  background: var(--danger-light);
+  border: 2px dashed var(--danger);
+  color: var(--danger);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Promise To Pay (PTP) Badges */
+.ptp-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Purchase Order Preview Card */
+.po-preview-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-top: 16px;
+}
+
+/* Digital Passbook Receipt Row */
+.passbook-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border-color);
+  font-size: 0.88rem;
+}
+
+/* ====================== */
+/* Digital Storefront CSS */
+/* ====================== */
+
+/* Online Store Badge Glow */
+.btn-success {
+  background: #22c55e;
+  color: white;
+  border: 1px solid #16a34a;
+}
+
+.btn-success:hover {
+  background: #16a34a;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+}
+
+.btn-secondary {
+  background: var(--bg-main);
+  color: var(--text-body);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-surface);
+  border-color: var(--primary);
+}
+
+/* Storefront Product Card Hover */
+.card:has(img):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Store Banner Gradient */
+.store-banner {
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 50%, #8b5cf6 100%);
+  color: white;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+}
+
+/* Customer Store Cart Floating Bar */
+.customer-cart-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 600px;
+  background: var(--bg-surface);
+  border: 2px solid var(--primary);
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.3);
+  border-radius: 16px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1000;
+  animation: cartSlideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes cartSlideUp {
+  from {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Online Badge Pulse */
+.badge-success {
+  animation: badgePulse 2.5s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+
+/* QR Standee Modal Print Styles */
+@media print {
+  .sidebar, .top-header, .mobile-bottom-nav, .fab-button, .ai-copilot-drawer,
+  .modal-overlay .close-btn, .toast-container {
+    display: none !important;
+  }
+  
+  .modal-overlay {
+    position: static !important;
+    background: white !important;
+  }
+  
+  .modal-card {
+    box-shadow: none !important;
+    border: 2px solid #333 !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Storefront Grid Responsive */
+@media (max-width: 768px) {
+  .card:has(img) {
+    min-width: unset;
+  }
+}

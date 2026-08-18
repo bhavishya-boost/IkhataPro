@@ -1,0 +1,330 @@
+/* iKhataPro Module Specific Styles */
+
+/* Khata Customer Cards & Entry */
+.customer-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.customer-item-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.customer-item-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.customer-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.customer-details {
+  flex: 1;
+  margin: 0 16px;
+}
+
+.customer-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-main);
+}
+
+.customer-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-balance-box {
+  text-align: right;
+}
+
+.balance-amount {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.balance-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.balance-amount.get { color: var(--success); }
+.balance-amount.give { color: var(--danger); }
+.balance-amount.neutral { color: var(--text-muted); }
+
+/* I GAVE / I GOT Selector Buttons */
+.gave-got-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.toggle-btn {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-color);
+  background: var(--bg-surface);
+  font-weight: 800;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.toggle-btn.gave {
+  color: var(--danger);
+}
+.toggle-btn.gave.active {
+  background: var(--danger-light);
+  border-color: var(--danger);
+}
+
+.toggle-btn.got {
+  color: var(--success);
+}
+.toggle-btn.got.active {
+  background: var(--success-light);
+  border-color: var(--success);
+}
+
+/* POS Counter Layout */
+.pos-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  height: calc(100vh - 140px);
+}
+
+@media (max-width: 1024px) {
+  .pos-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+}
+
+.pos-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pos-product-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-height: 120px;
+}
+
+.pos-product-card:hover {
+  border-color: var(--primary);
+  transform: scale(1.02);
+}
+
+.pos-cart-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.cart-items-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.cart-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-color);
+  font-size: 0.88rem;
+}
+
+/* Floating AI Business Copilot Drawer */
+.ai-copilot-drawer {
+  position: fixed;
+  top: 0;
+  right: -420px;
+  width: 400px;
+  bottom: 0;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xl);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  transition: right var(--transition-normal);
+  border-left: 1px solid var(--border-color);
+}
+
+.ai-copilot-drawer.open {
+  right: 0;
+}
+
+.copilot-header {
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  color: white;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copilot-messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #faf5ff;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.chat-bubble.ai {
+  background: white;
+  color: var(--text-main);
+  border-top-left-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+  border: 1px solid #e9d5ff;
+}
+
+.chat-bubble.user {
+  background: var(--primary);
+  color: white;
+  border-top-right-radius: 4px;
+  align-self: flex-end;
+}
+
+.copilot-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Business Health Score Gauge */
+.health-score-container {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
+  border-radius: var(--radius-xl);
+  padding: 20px;
+}
+
+.health-gauge {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: conic-gradient(var(--success) 0.82turn, rgba(255,255,255,0.1) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.health-gauge::before {
+  content: '';
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  background: #0f172a;
+  border-radius: 50%;
+}
+
+.health-score-value {
+  position: relative;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+}
+
+/* Collection Route Map Simulator */
+.collection-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.route-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  border-radius: var(--radius-md);
+}
+
+.route-step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}

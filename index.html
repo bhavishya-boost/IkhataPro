@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>iKhataPro — Your Business. Smarter.</title>
+  <meta name="description" content="Digital Khata, Payments, Customers, Inventory, POS, Invoices, Expenses, Analytics and AI Copilot for SMBs.">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/khata.css">
+  <link rel="stylesheet" href="css/onboarding.css">
+  <link rel="stylesheet" href="css/features.css">
+</head>
+<body>
+
+  <!-- Root SPA View Containers -->
+  <div id="welcome-view" style="display: none;"></div>
+  <div id="onboarding-view-container" style="display: none;"></div>
+  <div id="login-view" style="display: none;"></div>
+  <div id="unauthorized-view" style="display: none;"></div>
+
+  <!-- Dedicated Shop Workspace Shell -->
+  <div id="workspace-view" class="app-container" style="display: flex;">
+
+    <!-- Desktop Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <span>⚡ iKhataPro</span>
+          <span class="brand-badge">AI</span>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <div>
+          <div class="nav-group-label">MAIN MENU</div>
+          <ul class="nav-list">
+            <li class="nav-item active" data-route="dashboard" onclick="window.iKhataUI.navigate('dashboard')">
+              <span class="icon">🏠</span> Home
+            </li>
+            <li class="nav-item" data-route="khata" onclick="window.iKhataUI.navigate('khata')">
+              <span class="icon">📖</span> My Khata
+            </li>
+            <li class="nav-item" data-route="pos" onclick="window.iKhataUI.navigate('pos')">
+              <span class="icon">🛒</span> POS Counter
+            </li>
+            <li class="nav-item" data-route="inventory" onclick="window.iKhataUI.navigate('inventory')">
+              <span class="icon">📦</span> Inventory
+            </li>
+            <li class="nav-item" data-route="suppliers" onclick="window.iKhataUI.navigate('suppliers')">
+              <span class="icon">🏭</span> Suppliers
+            </li>
+            <li class="nav-item" data-route="invoices" onclick="window.iKhataUI.navigate('invoices')">
+              <span class="icon">📄</span> Invoices
+            </li>
+            <li class="nav-item" data-route="expenses" onclick="window.iKhataUI.navigate('expenses')">
+              <span class="icon">🧾</span> Expenses
+            </li>
+            <li class="nav-item" data-route="pnl" onclick="window.iKhataUI.navigate('pnl')">
+              <span class="icon">📈</span> Profit & Loss
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="nav-group-label">SMART TOOLS</div>
+          <ul class="nav-list">
+            <li class="nav-item" onclick="window.iKhataGullak.openGullakModal()">
+              <span class="icon">💵</span> Daily Cash Gullak
+            </li>
+            <li class="nav-item" onclick="window.iKhataPO.openPOModal()">
+              <span class="icon">🤖</span> AI Supplier PO
+            </li>
+            <li class="nav-item" data-route="analytics" onclick="window.iKhataUI.navigate('analytics')">
+              <span class="icon">📊</span> Reports & AI Forecast
+            </li>
+            <li class="nav-item" data-route="statement-generator" onclick="window.iKhataUI.navigate('statement-generator')">
+              <span class="icon">🧾</span> Custom Statements & Filters
+            </li>
+            <li class="nav-item" data-route="simulator" onclick="window.iKhataUI.navigate('simulator')">
+              <span class="icon">⚙️</span> What-If Simulator
+            </li>
+            <li class="nav-item" data-route="collection-map" onclick="window.iKhataUI.navigate('collection-map')">
+              <span class="icon">🗺️</span> Collection Route
+            </li>
+            <li class="nav-item" data-route="employees" onclick="window.iKhataUI.navigate('employees')">
+              <span class="icon">👥</span> Employees & RBAC
+            </li>
+            <li class="nav-item" data-route="storefront" onclick="window.iKhataUI.navigate('storefront')">
+              <span class="icon">🛍️</span> Digital Storefront
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="business-selector" onclick="window.iKhataUI.openBusinessSelector()">
+          <div class="business-avatar" id="shop-brand-avatar">💎</div>
+          <div class="business-info">
+            <div class="business-name" id="shop-brand-name">LJS Jewellers</div>
+            <div class="business-branch" id="shop-brand-branch">Mathura Branch ▼</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+      
+      <!-- Top Sticky Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">
+            ☰
+          </button>
+
+          <div class="search-trigger" onclick="window.iKhataSearch.open()">
+            <span class="icon">🔍</span>
+            <span>Search customer, invoice, product...</span>
+            <span class="kbd-shortcut">Ctrl+K</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <button class="icon-btn" onclick="window.iKhataGullak.openGullakModal()" title="Daily Cash Gullak Counter">
+            <span>💵</span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataUI.openNotificationCenter()" title="Notification Center" style="position: relative;">
+            <span>🔔</span>
+            <span id="notif-badge-dot" style="position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: var(--danger); border-radius: 50%; display: none;"></span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataUI.openShortcutHelpModal()" title="Keyboard Shortcuts Guide (?)">
+            <span>⌨️</span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataUI.openSettingsModal()" title="Business Settings & Backup">
+            <span>⚙️</span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataPIN.requirePIN(() => { window.iKhataUI.showToast('PIN Security Verified', 'success'); }, 'Verify PIN')" title="PIN Security Lock">
+            <span>🔒</span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataVoice.startListening()" title="Voice Khata">
+            <span>🎙️</span>
+          </button>
+
+          <button class="icon-btn" onclick="window.iKhataCopilot.toggle()" title="Ask AI Copilot">
+            <span>🤖</span>
+          </button>
+
+          <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.logout()">
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <!-- Offline Network Connectivity Banner -->
+      <div id="offline-network-banner" style="display: none; background: #991b1b; color: white; text-align: center; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; z-index: 1000;">
+        ⚠️ Offline Mode — Internet connection lost. Viewing cached business state. Financial writes will queue locally.
+      </div>
+
+      <!-- Dynamic Page View Container -->
+      <main class="page-view" id="page-view-container">
+        <!-- Rendered by app.js router -->
+      </main>
+    </div>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav">
+      <div class="mobile-nav-item active" data-route="dashboard" onclick="window.iKhataUI.navigate('dashboard')">
+        <span class="icon">🏠</span>
+        <span>Home</span>
+      </div>
+      <div class="mobile-nav-item" data-route="khata" onclick="window.iKhataUI.navigate('khata')">
+        <span class="icon">📖</span>
+        <span>Khata</span>
+      </div>
+      <div class="mobile-nav-item" data-route="pos" onclick="window.iKhataUI.navigate('pos')">
+        <span class="icon">🛒</span>
+        <span>POS</span>
+      </div>
+      <div class="mobile-nav-item" data-route="inventory" onclick="window.iKhataUI.navigate('inventory')">
+        <span class="icon">📦</span>
+        <span>Stock</span>
+      </div>
+      <div class="mobile-nav-item" data-route="suppliers" onclick="window.iKhataUI.navigate('suppliers')">
+        <span class="icon">🏭</span>
+        <span>Suppliers</span>
+      </div>
+      <div class="mobile-nav-item" data-route="pnl" onclick="window.iKhataUI.navigate('pnl')">
+        <span class="icon">📈</span>
+        <span>P&L</span>
+      </div>
+    </nav>
+
+    <!-- Floating Action Button (+) -->
+    <button class="fab-button" onclick="window.iKhataUI.openAddKhataModal()" title="Add Khata Entry">
+      +
+    </button>
+
+    <!-- Floating AI Business Copilot Drawer -->
+    <div class="ai-copilot-drawer" id="ai-copilot-drawer">
+      <div class="copilot-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">🤖</span>
+          <strong>iKhataPro Business Copilot</strong>
+        </div>
+        <button class="close-btn" style="color: white;" onclick="window.iKhataCopilot.toggle()">✕</button>
+      </div>
+
+      <div class="copilot-messages" id="copilot-messages">
+        <!-- Rendered by copilot.js -->
+      </div>
+
+      <div class="copilot-input-area">
+        <input type="text" id="copilot-input" class="form-input" placeholder="Ask AI... (e.g. Rahul se 5000 lene hain)" onkeypress="if(event.key === 'Enter'){ window.iKhataCopilot.sendMessage(this.value); this.value = ''; }">
+        <button class="btn btn-ai" onclick="const input = document.getElementById('copilot-input'); window.iKhataCopilot.sendMessage(input.value); input.value = '';">
+          Send
+        </button>
+      </div>
+    </div>
+
+    <!-- Global Modal Overlay -->
+    <div class="modal-overlay" id="global-modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="global-modal-title">Modal Title</h3>
+          <button class="close-btn" onclick="window.iKhataUI.closeModal()">✕</button>
+        </div>
+        <div class="modal-body" id="global-modal-body">
+          <!-- Body content inserted dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Command Palette Search Modal -->
+    <div class="modal-overlay" id="search-palette-modal">
+      <div class="modal-card" style="max-width: 600px;">
+        <div style="padding: 16px; border-bottom: 1px solid var(--border-color);">
+          <input type="text" id="palette-input" class="form-input" style="font-size: 1.1rem; border: none; outline: none; background: none;" placeholder="Type a command or search customers/products..." oninput="window.iKhataSearch.onInput(this.value)">
+        </div>
+        <div style="padding: 16px; max-height: 350px; overflow-y: auto;" id="palette-results">
+          <!-- Results rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+  </div>
+
+  <!-- PDF Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- JavaScript Modules -->
+  <script src="js/demoData.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/modules/onboarding.js"></script>
+  <script src="js/modules/pinSecurity.js"></script>
+  <script src="js/modules/cashGullak.js"></script>
+  <script src="js/modules/purchaseOrders.js"></script>
+  <script src="js/modules/ptpScheduler.js"></script>
+  <script src="js/modules/intelligence.js"></script>
+  <script src="js/modules/dashboard.js"></script>
+  <script src="js/modules/khata.js"></script>
+  <script src="js/modules/customers.js"></script>
+  <script src="js/modules/suppliers.js"></script>
+  <script src="js/modules/pos.js"></script>
+  <script src="js/modules/inventory.js"></script>
+  <script src="js/modules/invoices.js"></script>
+  <script src="js/modules/expenses.js"></script>
+  <script src="js/modules/pnl.js"></script>
+  <script src="js/modules/analytics.js"></script>
+  <script src="js/modules/simulator.js"></script>
+  <script src="js/modules/collectionMap.js"></script>
+  <script src="js/modules/copilot.js"></script>
+  <script src="js/modules/voiceKhata.js"></script>
+  <script src="js/modules/employees.js"></script>
+  <script src="js/modules/search.js"></script>
+  <script src="js/modules/storefront.js"></script>
+  <script src="js/modules/statementGenerator.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

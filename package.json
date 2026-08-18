@@ -1,0 +1,13 @@
+{
+  "name": "ikhatapro",
+  "version": "1.0.0",
+  "description": "iKhataPro — Next-Generation Business Management Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
