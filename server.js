@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -26,6 +26,16 @@ app.get('/api/dashboard/summary', getDashboardSummary);
 // ── Health Check ───────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'iKhataPro API is running ✅', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/supabase/health', async (req, res) => {
+  try {
+    const supabaseWrapper = require('./js/supabaseClient');
+    const result = await supabaseWrapper.testConnection();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, isOnline: false, message: 'Supabase health check exception', error: err.message });
+  }
 });
 
 // ── Serve public/ (new standalone dashboard) ───────────────────────────────────
