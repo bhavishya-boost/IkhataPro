@@ -3,7 +3,8 @@
 window.iKhataCollectionMap = {
   render(state) {
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
-    const pendingCust = state.customers.filter(c => c.balance > 0).slice(0, 5);
+    const customers = window.iKhataStore.getCustomers();
+    const pendingCust = customers.filter(c => c.balance > 0).slice(0, 5);
 
     return `
       <div style="margin-bottom: 20px;">

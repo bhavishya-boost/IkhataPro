@@ -231,7 +231,7 @@ window.iKhataUI = {
       const errBox = document.getElementById('login-error-alert');
       if (errBox) {
         errBox.style.display = 'block';
-        errBox.innerHTML = `⚠️ ${result.message || 'Invalid credentials'}. Try quick login pills below!`;
+        errBox.innerHTML = `⚠️ ${result.message || 'Invalid credentials'}`;
       }
     }
   },

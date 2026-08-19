@@ -47,7 +47,7 @@ window.iKhataEmployees = {
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${state.employees.map(emp => `
+          ${(window.iKhataStore.getEmployees() || []).map(emp => `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px;">
               <div>
                 <strong style="font-size: 1rem;">${emp.name}</strong>

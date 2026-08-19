@@ -778,31 +778,53 @@
       }
 
       if (!business && userLower) {
-        business = this.state.businesses.find(b => 
-          b.username.toLowerCase() === userLower || 
-          (b.email && b.email.toLowerCase() === userLower) || 
-          (b.mobile && b.mobile.trim() === userLower) ||
-          b.slug === userLower ||
-          b.ownerName.toLowerCase().includes(userLower)
-        );
+        const cleanUser = userLower.replace(/[^a-z0-9]/g, '');
+        business = this.state.businesses.find(b => {
+          const bUsername = (b.username || '').toLowerCase();
+          const bEmail = (b.email || '').toLowerCase();
+          const bMobile = (b.mobile || '').replace(/[^0-9]/g, '');
+          const bSlug = (b.slug || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const bOwner = (b.ownerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          return (
+            (bUsername && bUsername === userLower) ||
+            (bEmail && bEmail === userLower) ||
+            (bMobile && cleanUser && bMobile === cleanUser) ||
+            (bSlug && bSlug === userLower) ||
+            (bName && cleanUser && (bName.includes(cleanUser) || cleanUser.includes(bName))) ||
+            (bOwner && cleanUser && (bOwner.includes(cleanUser) || cleanUser.includes(bOwner)))
+          );
+        });
       }
 
-      if (!business) {
-        if (userLower === 'aryan' || userLower === 'ljs') {
+      if (!business && userLower) {
+        if (userLower.includes('aryan') || userLower.includes('ljs')) {
           business = this.state.businesses.find(b => b.slug === 'ljs-jewellers') || this.state.businesses[0];
-        } else if (userLower === 'rahul' || userLower === 'sharma') {
+        } else if (userLower.includes('rahul') || userLower.includes('sharma')) {
           business = this.state.businesses.find(b => b.slug === 'sharma-electronics') || this.state.businesses[0];
         } else if (this.state.businesses.length > 0) {
-          business = this.state.businesses[this.state.businesses.length - 1];
+          const nonDemo = this.state.businesses.filter(b => b.id !== 'BUS_LJS' && b.id !== 'BUS_SHARMA');
+          if (nonDemo.length === 1) {
+            business = nonDemo[0];
+          }
         }
       }
 
       if (!business) {
-        return { success: false, message: 'Invalid username, password or shop workspace name.' };
+        return { success: false, message: 'Shop workspace, username, or phone not found.' };
       }
 
-      if (password && business.passwordHash && business.passwordHash !== password && password !== 'Pass123!' && password !== 'admin' && password !== '123456') {
-        return { success: false, message: 'Incorrect password. (Tip: Demo password is Pass123!)' };
+      // Password Validation
+      const storedPass = business.passwordHash;
+      const isPassValid = !password ||
+                          (storedPass && password === storedPass) ||
+                          password === 'Pass123!' ||
+                          password === 'admin' ||
+                          password === '123456';
+
+      if (!isPassValid) {
+        return { success: false, message: `Incorrect password for ${business.name}.` };
       }
 
       this.state.currentSession = {
