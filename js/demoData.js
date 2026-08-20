@@ -244,11 +244,7 @@ window.iKhataDemo = {
     ];
 
     // 11. Employees
-    const employees = [
-      { id: 'emp1', business_id: 'BUS_LJS', name: 'Aryan Soni', role: 'Owner', phone: '+91 99999 11111', sales: 485000, collections: 390000, active: true },
-      { id: 'emp2', business_id: 'BUS_LJS', name: 'Kamal Verma', role: 'Manager', phone: '+91 98888 22222', sales: 245000, collections: 210000, active: true },
-      { id: 'emps1', business_id: 'BUS_SHARMA', name: 'Rahul Sharma', role: 'Owner', phone: '+91 97777 66666', sales: 650000, collections: 580000, active: true }
-    ];
+    const employees = [];
 
     // 12. Audit Logs
     const auditLogs = [

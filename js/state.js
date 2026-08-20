@@ -12,15 +12,22 @@
     }
 
     loadState() {
+      let state;
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          return JSON.parse(saved);
+          state = JSON.parse(saved);
         }
       } catch (e) {
         console.error('Failed to load state from localStorage', e);
       }
-      return window.iKhataDemo.getInitialState();
+      if (!state) {
+        state = window.iKhataDemo.getInitialState();
+      }
+      if (state && Array.isArray(state.employees)) {
+        state.employees = state.employees.filter(e => e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
+      }
+      return state;
     }
 
     saveState() {
@@ -1188,6 +1195,22 @@
       this.saveState();
       return { success: true, business: target };
     }
+
+    getUserBusinesses() {
+      const session = this.state.currentSession;
+      if (!session || !session.user) return this.state.businesses || [];
+      
+      const currUsername = (session.user.username || session.user.name || '').toLowerCase().trim();
+      
+      // Filter businesses that belong to the logged-in user
+      const userBuses = (this.state.businesses || []).filter(b => {
+        const bUser = (b.username || b.ownerName || '').toLowerCase().trim();
+        return bUser === currUsername || b.id === session.businessId || (currUsername.length > 0 && bUser.includes(currUsername));
+      });
+
+      return userBuses.length > 0 ? userBuses : (this.state.businesses || []).filter(b => b.id === session.businessId);
+    }
+
 
     async switchBusinessSecure(businessId) {
       const target = this.state.businesses.find(b => b.id === businessId || b.slug === businessId);

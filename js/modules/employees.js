@@ -4,6 +4,14 @@ window.iKhataEmployees = {
   render(state) {
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
 
+    const employees = window.iKhataStore.getEmployees() || [];
+    
+    const sortedBySales = [...employees].sort((a, b) => (b.sales || 0) - (a.sales || 0));
+    const topSeller = sortedBySales[0] && (sortedBySales[0].sales || 0) > 0 ? sortedBySales[0] : null;
+
+    const sortedByCollections = [...employees].sort((a, b) => (b.collections || 0) - (a.collections || 0));
+    const collectionChampion = sortedByCollections[0] && (sortedByCollections[0].collections || 0) > 0 ? sortedByCollections[0] : null;
+
     return `
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
         <div>
@@ -22,8 +30,8 @@ window.iKhataEmployees = {
             <div style="font-size: 2rem;">🏆</div>
             <div>
               <span class="badge badge-warning">Top Seller</span>
-              <h3 style="margin-top: 2px;">Aryan Sharma</h3>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Sales: ${formatCurrency(485000)}</div>
+              <h3 style="margin-top: 2px;">${topSeller ? topSeller.name : 'No Sales Yet'}</h3>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">${topSeller ? 'Sales: ' + formatCurrency(topSeller.sales) : 'Add sales to select winner'}</div>
             </div>
           </div>
         </div>
@@ -33,8 +41,8 @@ window.iKhataEmployees = {
             <div style="font-size: 2rem;">🔥</div>
             <div>
               <span class="badge badge-success">Collection Champion</span>
-              <h3 style="margin-top: 2px;">Kamal Verma</h3>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Collected: ${formatCurrency(210000)}</div>
+              <h3 style="margin-top: 2px;">${collectionChampion ? collectionChampion.name : 'No Collections Yet'}</h3>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">${collectionChampion ? 'Collected: ' + formatCurrency(collectionChampion.collections) : 'Record collections to select winner'}</div>
             </div>
           </div>
         </div>
@@ -47,7 +55,13 @@ window.iKhataEmployees = {
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${(window.iKhataStore.getEmployees() || []).map(emp => `
+          ${employees.length === 0 ? `
+            <div style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
+              <div style="font-size: 2.5rem; margin-bottom: 8px;">👥</div>
+              <p style="font-weight: 600; font-size: 1rem; color: var(--text-color); margin-bottom: 4px;">Koi Employee Add Nahi Hai</p>
+              <p style="font-size: 0.85rem;">Upar "➕ Add Employee" button par click karke naya staff member add karein.</p>
+            </div>
+          ` : employees.map(emp => `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px;">
               <div>
                 <strong style="font-size: 1rem;">${emp.name}</strong>

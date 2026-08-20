@@ -554,12 +554,12 @@ window.iKhataUI = {
   },
 
   openBusinessSelector() {
-    const state = window.iKhataStore.state;
+    const userBusinesses = window.iKhataStore.getUserBusinesses();
     const currentBus = window.iKhataStore.getCurrentBusiness();
 
     this.openModal('Switch Business Workspace', `
       <div style="display: flex; flex-direction: column; gap: 12px;">
-        ${state.businesses.map(b => `
+        ${userBusinesses.map(b => `
           <div class="business-switch-item ${b.id === currentBus.id ? 'active' : ''}" onclick="window.iKhataStore.switchBusiness('${b.id}'); window.iKhataUI.closeModal(); window.iKhataUI.navigateToWorkspace('${b.slug}');">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 1.3rem;">${b.logo || '🏪'}</span>

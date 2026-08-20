@@ -1,10 +1,27 @@
 /* iKhataPro Feature 4: Daily Cash Gullak Drawer Reconciliation */
 
 window.iKhataGullak = {
-  counts: { 2000: 0, 500: 10, 200: 15, 100: 20, 50: 10, 20: 10, 10: 10, coins: 200 },
+  counts: { 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, coins: 0 },
 
-  updateCount(note, val) {
-    this.counts[note] = parseInt(val) || 0;
+  getSystemCashSales() {
+    const bus = window.iKhataStore.getCurrentBusiness ? window.iKhataStore.getCurrentBusiness() : {};
+    if (bus && typeof bus.todayReceived === 'number') return bus.todayReceived;
+    const allBills = window.iKhataStore.getBills ? window.iKhataStore.getBills() : [];
+    const today = new Date().toISOString().split('T')[0];
+    const todayCashBills = allBills.filter(b => b.date === today && (b.paymentMethod === 'Cash' || b.paymentMode === 'Cash'));
+    return todayCashBills.reduce((sum, b) => sum + (b.grandTotal || b.total || 0), 0);
+  },
+
+  updateCount(denom, val) {
+    const countVal = Math.max(0, parseInt(val) || 0);
+    this.counts[denom] = countVal;
+
+    const rowTotalEl = document.getElementById(`gullak-row-${denom}`);
+    if (rowTotalEl) {
+      const rowAmt = denom === 'coins' ? countVal : (parseInt(denom) * countVal);
+      rowTotalEl.innerText = '= ₹' + rowAmt.toLocaleString('en-IN');
+    }
+
     this.calculateTotal();
   },
 
@@ -12,9 +29,9 @@ window.iKhataGullak = {
     let physicalTotal = 0;
     Object.keys(this.counts).forEach(denom => {
       if (denom === 'coins') {
-        physicalTotal += this.counts.coins;
+        physicalTotal += (this.counts.coins || 0);
       } else {
-        physicalTotal += (parseInt(denom) * this.counts[denom]);
+        physicalTotal += (parseInt(denom) * (this.counts[denom] || 0));
       }
     });
 
@@ -23,9 +40,7 @@ window.iKhataGullak = {
 
     if (totalEl) totalEl.innerText = '₹' + physicalTotal.toLocaleString('en-IN');
 
-    // System POS Cash Total
-    const bus = window.iKhataStore.getCurrentBusiness();
-    const systemCash = bus.todayReceived || 21200;
+    const systemCash = this.getSystemCashSales();
     const diff = physicalTotal - systemCash;
 
     if (varianceEl) {
@@ -43,8 +58,9 @@ window.iKhataGullak = {
   },
 
   openGullakModal() {
-    const bus = window.iKhataStore.getCurrentBusiness();
-    const systemCash = bus.todayReceived || 21200;
+    // Reset counts for fresh session
+    this.counts = { 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, coins: 0 };
+    const systemCash = this.getSystemCashSales();
 
     window.iKhataUI.openModal('💵 Daily Cash Gullak & Counter Tally', `
       <div>
@@ -63,15 +79,15 @@ window.iKhataGullak = {
             <div class="gullak-note-row">
               <span class="gullak-note-label">₹${denom}</span>
               <span style="color: var(--text-muted);">×</span>
-              <input type="number" class="form-input" style="width: 70px; text-align: center;" value="${this.counts[denom] || 0}" oninput="window.iKhataGullak.updateCount(${denom}, this.value)">
-              <span style="font-weight: 700; font-size: 0.9rem; width: 60px; text-align: right;">= ₹${((this.counts[denom] || 0) * denom).toLocaleString('en-IN')}</span>
+              <input type="number" min="0" class="form-input" style="width: 70px; text-align: center;" value="${this.counts[denom]}" oninput="window.iKhataGullak.updateCount(${denom}, this.value)">
+              <span id="gullak-row-${denom}" style="font-weight: 700; font-size: 0.9rem; width: 80px; text-align: right;">= ₹0</span>
             </div>
           `).join('')}
           <div class="gullak-note-row">
             <span class="gullak-note-label">Coins</span>
             <span style="color: var(--text-muted);">Sum</span>
-            <input type="number" class="form-input" style="width: 70px; text-align: center;" value="${this.counts.coins || 0}" oninput="window.iKhataGullak.updateCount('coins', this.value)">
-            <span style="font-weight: 700; font-size: 0.9rem; width: 60px; text-align: right;">= ₹${(this.counts.coins || 0).toLocaleString('en-IN')}</span>
+            <input type="number" min="0" class="form-input" style="width: 70px; text-align: center;" value="${this.counts.coins}" oninput="window.iKhataGullak.updateCount('coins', this.value)">
+            <span id="gullak-row-coins" style="font-weight: 700; font-size: 0.9rem; width: 80px; text-align: right;">= ₹0</span>
           </div>
         </div>
 
@@ -88,6 +104,6 @@ window.iKhataGullak = {
       </div>
     `);
 
-    setTimeout(() => this.calculateTotal(), 100);
+    setTimeout(() => this.calculateTotal(), 50);
   }
 };

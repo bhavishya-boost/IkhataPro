@@ -9,9 +9,16 @@ window.iKhataSimulator = {
   render(state) {
     const formatCurrency = (amt) => '₹' + Math.round(amt || 0).toLocaleString('en-IN');
 
-    // Base figures
-    const baseRevenue = 485000;
-    const baseExpenses = 82400;
+    // Dynamic Base figures from store data
+    const allBills = window.iKhataStore.getBills ? window.iKhataStore.getBills() : [];
+    const allTx = window.iKhataStore.getTransactions ? window.iKhataStore.getTransactions() : [];
+    const allExpenses = window.iKhataStore.getExpenses ? window.iKhataStore.getExpenses() : [];
+
+    const totalBillRevenue = allBills.reduce((acc, b) => acc + (b.grandTotal || b.total || 0), 0);
+    const totalTxRevenue = allTx.filter(t => t.type === 'GOT' || t.type === 'GAVE').reduce((acc, t) => acc + (t.amount || 0), 0);
+    const baseRevenue = Math.max(totalBillRevenue, totalTxRevenue);
+    
+    const baseExpenses = allExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
 
     // Simulation Math
     const priceMultiplier = 1 + (this.priceChange / 100);
