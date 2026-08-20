@@ -202,6 +202,25 @@
       return this.state.employees.filter(emp => emp.business_id === bId && !emp.isDeleted);
     }
 
+    addEmployee(empData) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.employees) this.state.employees = [];
+      const newEmp = {
+        id: 'emp_' + Date.now(),
+        business_id: bId,
+        name: empData.name,
+        phone: empData.phone,
+        role: empData.role || 'Salesman',
+        sales: empData.sales || 0,
+        collections: empData.collections || 0,
+        isDeleted: false,
+        createdAt: new Date().toISOString()
+      };
+      this.state.employees.push(newEmp);
+      this.saveToLocalStorage();
+      return newEmp;
+    }
+
     getSupplierTransactions(supplierId = null) {
       const bId = this.getActiveBusinessId();
       if (!this.state.supplierTransactions) this.state.supplierTransactions = [];

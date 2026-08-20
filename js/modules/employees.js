@@ -10,7 +10,7 @@ window.iKhataEmployees = {
           <h1 style="font-size: 1.75rem;">Employees & Permissions</h1>
           <p style="color: var(--text-muted); font-size: 0.9rem;">Manage shop staff, role permissions, and sales performance leaderboards</p>
         </div>
-        <button class="btn btn-primary" onclick="window.iKhataUI.showToast('Staff invite link copied!', 'success')">
+        <button class="btn btn-primary" onclick="window.iKhataEmployees.openAddEmployeeModal()">
           <span>➕</span> Add Employee
         </button>
       </div>
@@ -97,5 +97,71 @@ window.iKhataEmployees = {
         </button>
       </div>
     `);
+  },
+
+  openAddEmployeeModal() {
+    window.iKhataUI.openModal('➕ Add New Employee', `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Employee Name *</label>
+          <input id="emp-name-input" type="text" placeholder="e.g. Rahul Kumar" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Phone Number *</label>
+          <input id="emp-phone-input" type="tel" placeholder="e.g. 9876543210" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Role *</label>
+          <select id="emp-role-input" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box; background: var(--bg-card);">
+            <option value="Salesman">Salesman</option>
+            <option value="Accountant">Accountant</option>
+            <option value="Manager">Manager</option>
+            <option value="Owner">Owner</option>
+            <option value="Delivery Staff">Delivery Staff</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="margin-top: 4px; width: 100%;" onclick="window.iKhataEmployees.saveNewEmployee()">
+          ✅ Save Employee
+        </button>
+      </div>
+    `);
+  },
+
+  saveNewEmployee() {
+    const name  = document.getElementById('emp-name-input')?.value?.trim();
+    const phone = document.getElementById('emp-phone-input')?.value?.trim();
+    const role  = document.getElementById('emp-role-input')?.value;
+
+    if (!name || !phone) {
+      window.iKhataUI.showToast('❌ Naam aur phone number daalein!', 'error');
+      return;
+    }
+    if (!/^\d{10}$/.test(phone)) {
+      window.iKhataUI.showToast('❌ Valid 10-digit phone number daalein!', 'error');
+      return;
+    }
+
+    const newEmp = { name, phone, role, sales: 0, collections: 0 };
+
+    // Store mein add karo
+    if (window.iKhataStore && typeof window.iKhataStore.addEmployee === 'function') {
+      window.iKhataStore.addEmployee(newEmp);
+    } else {
+      // Fallback: state mein push karo
+      const state = window.iKhataStore?.getState?.() || {};
+      if (!state.employees) state.employees = [];
+      state.employees.push(newEmp);
+    }
+
+    window.iKhataUI.closeModal();
+    window.iKhataUI.showToast(`✅ ${name} ko add kar diya gaya!`, 'success');
+
+    // Page re-render karo
+    if (window.iKhataApp && typeof window.iKhataApp.navigate === 'function') {
+      window.iKhataApp.navigate('employees');
+    } else {
+      const main = document.getElementById('main-content');
+      if (main) main.innerHTML = window.iKhataEmployees.render(window.iKhataStore?.getState?.() || {});
+    }
   }
 };
