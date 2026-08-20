@@ -1211,6 +1211,17 @@
       return userBuses.length > 0 ? userBuses : (this.state.businesses || []).filter(b => b.id === session.businessId);
     }
 
+    updateSecurityPIN(newPin) {
+      const bus = this.getCurrentBusiness();
+      if (bus) {
+        bus.securityPIN = newPin;
+        this.saveState();
+        return true;
+      }
+      return false;
+    }
+
+
 
     async switchBusinessSecure(businessId) {
       const target = this.state.businesses.find(b => b.id === businessId || b.slug === businessId);

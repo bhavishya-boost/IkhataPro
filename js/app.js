@@ -1358,6 +1358,13 @@ window.iKhataUI = {
             <button class="btn btn-outline btn-sm" style="width: 100%; margin-top: 16px;" onclick="window.iKhataUI.closeModal(); window.iKhataUI.navigate('employees');">
               Manage Employee Permissions & RBAC →
             </button>
+
+            <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+              <div style="font-weight: 700; margin-bottom: 8px; font-size: 0.9rem;">🔒 Shop Security PIN</div>
+              <button class="btn btn-outline btn-sm" style="width: 100%; font-weight: 600; border-color: var(--primary); color: var(--primary);" onclick="window.iKhataUI.closeModal(); window.iKhataPIN.openUpdatePINModal();">
+                🔑 Update / Change Security PIN
+              </button>
+            </div>
           </div>
         ` : activeTab === 'BACKUP' ? `
           <div>
