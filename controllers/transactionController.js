@@ -1,4 +1,35 @@
-﻿const supabase = require('../config/supabaseClient');
+const supabase = require('../config/supabaseClient');
+
+// Helper to update customer running balance in customers table
+const syncCustomerBalance = async (customerId) => {
+  if (!customerId) return;
+  try {
+    const { data: txns, error } = await supabase
+      .from('transactions')
+      .select('type, amount')
+      .eq('customer_id', customerId);
+
+    if (error) return;
+
+    let balance = 0;
+    (txns || []).forEach((t) => {
+      const typeStr = (t.type || '').toUpperCase();
+      const amt = Number(t.amount) || 0;
+      if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
+        balance += amt;
+      } else if (typeStr === 'JAMA' || typeStr === 'GOT') {
+        balance -= amt;
+      }
+    });
+
+    await supabase
+      .from('customers')
+      .update({ balance: Math.round(balance * 100) / 100 })
+      .eq('id', customerId);
+  } catch (err) {
+    console.warn('[transactionController] syncCustomerBalance error:', err.message);
+  }
+};
 
 // GET /api/transactions/:customerId — Get full ledger for a customer
 const getTransactionsByCustomer = async (req, res) => {
@@ -14,11 +45,13 @@ const getTransactionsByCustomer = async (req, res) => {
 
     // Calculate running balance
     let runningBalance = 0;
-    const ledger = data.map((txn) => {
-      if (txn.type === 'UDHAR') {
-        runningBalance += Number(txn.amount);
-      } else if (txn.type === 'JAMA') {
-        runningBalance -= Number(txn.amount);
+    const ledger = (data || []).map((txn) => {
+      const typeStr = (txn.type || '').toUpperCase();
+      const amt = Number(txn.amount) || 0;
+      if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
+        runningBalance += amt;
+      } else if (typeStr === 'JAMA' || typeStr === 'GOT') {
+        runningBalance -= amt;
       }
       return { ...txn, running_balance: runningBalance };
     });
@@ -32,19 +65,20 @@ const getTransactionsByCustomer = async (req, res) => {
 
 // POST /api/transactions — Add a new UDHAR or JAMA entry
 const createTransaction = async (req, res) => {
-  const { customer_id, type, amount, note, shopkeeper_id } = req.body;
+  const { customer_id, type, amount, note, business_id } = req.body;
 
   if (!customer_id || !type || !amount) {
     return res.status(400).json({
       success: false,
-      error: 'customer_id, type (UDHAR|JAMA), and amount are required.',
+      error: 'customer_id, type (UDHAR|JAMA|GAVE|GOT), and amount are required.',
     });
   }
 
-  if (!['UDHAR', 'JAMA'].includes(type.toUpperCase())) {
+  const rawType = String(type).toUpperCase();
+  if (!['UDHAR', 'JAMA', 'GAVE', 'GOT'].includes(rawType)) {
     return res.status(400).json({
       success: false,
-      error: 'Transaction type must be UDHAR or JAMA.',
+      error: 'Transaction type must be UDHAR, JAMA, GAVE, or GOT.',
     });
   }
 
@@ -54,21 +88,41 @@ const createTransaction = async (req, res) => {
   }
 
   try {
+    // Fetch customer details for customer_name and business_id
+    const { data: customer, error: custError } = await supabase
+      .from('customers')
+      .select('name, business_id')
+      .eq('id', customer_id)
+      .single();
+
+    if (custError || !customer) {
+      return res.status(404).json({ success: false, error: 'Customer not found.' });
+    }
+
+    const targetBusinessId = business_id || customer.business_id;
+
+    // Standardize type format (Keep input type or map safely)
+    const payload = {
+      customer_id,
+      customer_name: customer.name,
+      business_id: targetBusinessId,
+      type: rawType,
+      amount: parsedAmount,
+      note: note || null,
+      date: new Date().toISOString().split('T')[0],
+    };
+
     const { data, error } = await supabase
       .from('transactions')
-      .insert([
-        {
-          customer_id,
-          type: type.toUpperCase(),
-          amount: parsedAmount,
-          note: note || null,
-          shopkeeper_id: shopkeeper_id || null,
-        },
-      ])
+      .insert([payload])
       .select()
       .single();
 
     if (error) throw error;
+
+    // Recalculate and update customer balance asynchronously
+    await syncCustomerBalance(customer_id);
+
     return res.status(201).json({ success: true, data });
   } catch (err) {
     console.error('[transactionController] createTransaction:', err.message);
@@ -80,8 +134,20 @@ const createTransaction = async (req, res) => {
 const deleteTransaction = async (req, res) => {
   const { id } = req.params;
   try {
+    // Fetch transaction first to know customer_id for balance re-sync
+    const { data: txn } = await supabase
+      .from('transactions')
+      .select('customer_id')
+      .eq('id', id)
+      .single();
+
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) throw error;
+
+    if (txn && txn.customer_id) {
+      await syncCustomerBalance(txn.customer_id);
+    }
+
     return res.status(200).json({ success: true, message: 'Transaction deleted.' });
   } catch (err) {
     console.error('[transactionController] deleteTransaction:', err.message);
@@ -92,19 +158,28 @@ const deleteTransaction = async (req, res) => {
 // GET /api/dashboard/summary — Calculate total Udhar and Jama across all customers
 const getDashboardSummary = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('type, amount');
+    const { business_id } = req.query;
+    let query = supabase.from('transactions').select('type, amount');
+
+    if (business_id && business_id !== 'YOUR_BUSINESS_ID') {
+      query = query.eq('business_id', business_id.trim());
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
     let totalUdhar = 0;
     let totalJama = 0;
 
-    data.forEach((txn) => {
-      const amt = Number(txn.amount);
-      if (txn.type === 'UDHAR') totalUdhar += amt;
-      else if (txn.type === 'JAMA') totalJama += amt;
+    (data || []).forEach((txn) => {
+      const typeStr = (txn.type || '').toUpperCase();
+      const amt = Number(txn.amount) || 0;
+      if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
+        totalUdhar += amt;
+      } else if (typeStr === 'JAMA' || typeStr === 'GOT') {
+        totalJama += amt;
+      }
     });
 
     const netBalance = totalUdhar - totalJama;
@@ -130,3 +205,4 @@ module.exports = {
   deleteTransaction,
   getDashboardSummary,
 };
+

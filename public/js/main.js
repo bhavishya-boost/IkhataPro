@@ -3,7 +3,10 @@
    Handles: Customers, Transactions (UDHAR/JAMA), Dashboard Summary
 ────────────────────────────────────────────────────────────────── */
 
-const API = 'http://localhost:5000/api';
+const API = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http'))
+  ? `${window.location.origin}/api`
+  : 'http://localhost:5000/api';
+
 
 // ── App State ───────────────────────────────────────────────────
 const state = {
