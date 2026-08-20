@@ -869,6 +869,255 @@
         return { invoices: [], error: this.normalizeError(err) };
       }
     }
+
+    // Stage 9: POS Bills & POS Bill Items
+
+    async syncPosBillToCloud(billPayload, cloudUuid = null, mappedCustomerId = null) {
+      if (!this.client) return { success: false, error: 'Supabase offline' };
+      try {
+        const payload = {
+          bill_number:     billPayload.id || billPayload.bill_number || billPayload.billNumber,
+          customer_name:   billPayload.customerName || billPayload.customer_name || 'Walk-in Customer',
+          subtotal:        Math.round((parseFloat(billPayload.subtotal) || 0) * 100) / 100,
+          tax_amount:      Math.round((parseFloat(billPayload.taxAmt || billPayload.tax_amount) || 0) * 100) / 100,
+          discount:        Math.round((parseFloat(billPayload.discount) || 0) * 100) / 100,
+          grand_total:     Math.round((parseFloat(billPayload.grandTotal || billPayload.grand_total) || 0) * 100) / 100,
+          payment_method:  billPayload.paymentMethod || billPayload.payment_method || 'Cash',
+          date:            billPayload.date || new Date().toISOString().split('T')[0],
+          time_str:        billPayload.time || billPayload.time_str || null,
+          is_credit:       Boolean(
+            (billPayload.paymentMethod && billPayload.paymentMethod.includes('Credit')) ||
+            (billPayload.payment_method && billPayload.payment_method.includes('Credit')) ||
+            billPayload.is_credit
+          ),
+          is_deleted:      Boolean(billPayload.isDeleted || billPayload.is_deleted),
+          deleted_at:      billPayload.deletedAt || billPayload.deleted_at || null,
+          deleted_by:      billPayload.deletedBy || billPayload.deleted_by || null
+        };
+
+        if (billPayload.business_id) payload.business_id = billPayload.business_id;
+
+        if (mappedCustomerId && mappedCustomerId.length === 36 && mappedCustomerId.includes('-')) {
+          payload.customer_id = mappedCustomerId;
+        } else if (billPayload.customerId && billPayload.customerId.length === 36 && billPayload.customerId.includes('-')) {
+          payload.customer_id = billPayload.customerId;
+        } else {
+          payload.customer_id = null;
+        }
+
+        let response;
+        if (cloudUuid && cloudUuid.length === 36 && cloudUuid.includes('-')) {
+          response = await this.client.from('pos_bills').update(payload).eq('id', cloudUuid).select().single();
+        } else {
+          response = await this.client.from('pos_bills').insert(payload).select().single();
+        }
+
+        if (response.error) return { success: false, error: this.normalizeError(response.error) };
+        return { success: true, posBill: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async syncPosBillItemsToCloud(cloudBillId, businessId, itemsPayload, productCloudMap = {}) {
+      if (!this.client || !cloudBillId) return { success: false, error: 'Offline or missing bill UUID' };
+      try {
+        const { error: delError } = await this.client.from('pos_bill_items').delete().eq('bill_id', cloudBillId);
+        if (delError && delError.code !== 'PGRST116') {
+          console.warn('[Stage9] POS bill items delete warning:', delError.message);
+        }
+        if (!itemsPayload || itemsPayload.length === 0) return { success: true, items: [] };
+
+        const rows = itemsPayload.map(item => {
+          const prodUuid = productCloudMap[item.id || item.productId] ||
+            ((item.id && item.id.length === 36 && item.id.includes('-')) ? item.id : null);
+          const qty = Math.max(1, parseInt(item.qty || item.quantity) || 1);
+          const price = Math.round((parseFloat(item.price || item.unit_price) || 0) * 100) / 100;
+          const total = Math.round((parseFloat(item.total || item.line_total) || (qty * price)) * 100) / 100;
+
+          return {
+            business_id:  businessId,
+            bill_id:      cloudBillId,
+            product_id:   prodUuid,
+            product_name: item.name || item.product_name || 'Product',
+            quantity:     qty,
+            unit_price:   price,
+            line_total:   total
+          };
+        });
+
+        const { data, error } = await this.client.from('pos_bill_items').insert(rows).select();
+        if (error) return { success: false, error: this.normalizeError(error) };
+        return { success: true, items: data || [] };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchPosBillsFromCloud(businessId) {
+      if (!this.client || !businessId) return { posBills: [], error: 'Offline mode or missing businessId' };
+      try {
+        const { data, error } = await this.client
+          .from('pos_bills')
+          .select('*, pos_bill_items(*)')
+          .eq('business_id', businessId)
+          .order('date', { ascending: false });
+        if (error) return { posBills: [], error: this.normalizeError(error) };
+        return { posBills: data || [], error: null };
+      } catch (err) {
+        return { posBills: [], error: this.normalizeError(err) };
+      }
+    }
+
+    // Stage 10: Expenses
+
+    async syncExpenseToCloud(expPayload, cloudUuid = null) {
+      if (!this.client) return { success: false, error: 'Supabase offline' };
+      try {
+        const numAmount = Math.round((parseFloat(expPayload.amount) || 0) * 100) / 100;
+        if (numAmount <= 0) {
+          return { success: false, error: { message: 'Invalid amount: must be > 0' } };
+        }
+
+        const payload = {
+          category:       expPayload.category || 'Other',
+          amount:         numAmount,
+          date:           expPayload.date || new Date().toISOString().split('T')[0],
+          note:           expPayload.note || null,
+          is_ocr_scanned: Boolean(expPayload.is_ocr_scanned || expPayload.isOcrScanned),
+          ocr_vendor:     expPayload.ocr_vendor || expPayload.ocrVendor || null,
+          is_deleted:     Boolean(expPayload.isDeleted || expPayload.is_deleted),
+          deleted_at:     expPayload.deletedAt || expPayload.deleted_at || null,
+          deleted_by:     expPayload.deletedBy || expPayload.deleted_by || null
+        };
+
+        if (expPayload.business_id) {
+          payload.business_id = expPayload.business_id;
+        }
+
+        let response;
+        if (cloudUuid && cloudUuid.length === 36 && cloudUuid.includes('-')) {
+          response = await this.client.from('expenses').update(payload).eq('id', cloudUuid).select().single();
+        } else {
+          response = await this.client.from('expenses').insert(payload).select().single();
+        }
+
+        if (response.error) return { success: false, error: this.normalizeError(response.error) };
+        return { success: true, expense: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchExpensesFromCloud(businessId) {
+      if (!this.client || !businessId) return { expenses: [], error: 'Offline mode or missing businessId' };
+      try {
+        const { data, error } = await this.client
+          .from('expenses')
+          .select('*')
+          .eq('business_id', businessId)
+          .order('date', { ascending: false });
+        if (error) return { expenses: [], error: this.normalizeError(error) };
+        return { expenses: data || [], error: null };
+      } catch (err) {
+        return { expenses: [], error: this.normalizeError(err) };
+      }
+    }
+
+    // Stage 11: Notifications & Audit Logs
+
+    async syncNotificationToCloud(notifPayload, cloudUuid = null) {
+      if (!this.client) return { success: false, error: 'Supabase offline' };
+      try {
+        const payload = {
+          type:        notifPayload.type || 'INFO',
+          title:       notifPayload.title || 'Notification',
+          message:     notifPayload.message || '',
+          entity_type: notifPayload.entity_type || notifPayload.entityType || null,
+          entity_id:   notifPayload.entity_id || notifPayload.entityId || null,
+          is_read:     Boolean(notifPayload.is_read || notifPayload.isRead),
+          read_at:     notifPayload.read_at || notifPayload.readAt || null
+        };
+
+        if (notifPayload.business_id) {
+          payload.business_id = notifPayload.business_id;
+        }
+
+        if (notifPayload.user_id && notifPayload.user_id.length === 36 && notifPayload.user_id.includes('-')) {
+          payload.user_id = notifPayload.user_id;
+        }
+
+        let response;
+        if (cloudUuid && cloudUuid.length === 36 && cloudUuid.includes('-')) {
+          response = await this.client.from('notifications').update(payload).eq('id', cloudUuid).select().single();
+        } else {
+          response = await this.client.from('notifications').insert(payload).select().single();
+        }
+
+        if (response.error) return { success: false, error: this.normalizeError(response.error) };
+        return { success: true, notification: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchNotificationsFromCloud(businessId) {
+      if (!this.client || !businessId) return { notifications: [], error: 'Offline mode or missing businessId' };
+      try {
+        const { data, error } = await this.client
+          .from('notifications')
+          .select('*')
+          .eq('business_id', businessId)
+          .order('created_at', { ascending: false });
+        if (error) return { notifications: [], error: this.normalizeError(error) };
+        return { notifications: data || [], error: null };
+      } catch (err) {
+        return { notifications: [], error: this.normalizeError(err) };
+      }
+    }
+
+    async syncAuditLogToCloud(auditPayload) {
+      if (!this.client) return { success: false, error: 'Supabase offline' };
+      try {
+        const payload = {
+          user_name:   auditPayload.user_name || auditPayload.user || 'System',
+          action:      auditPayload.action || 'MUTATION',
+          entity_type: auditPayload.entity_type || auditPayload.entity || 'General',
+          entity_id:   auditPayload.entity_id || auditPayload.entityId || null,
+          details:     auditPayload.details || null
+        };
+
+        if (auditPayload.business_id) {
+          payload.business_id = auditPayload.business_id;
+        }
+
+        // Audit logs are APPEND-ONLY. Insert only.
+        const response = await this.client.from('audit_logs').insert(payload).select().single();
+
+        if (response.error) return { success: false, error: this.normalizeError(response.error) };
+        return { success: true, auditLog: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchAuditLogsFromCloud(businessId) {
+      if (!this.client || !businessId) return { auditLogs: [], error: 'Offline mode or missing businessId' };
+      try {
+        const { data, error } = await this.client
+          .from('audit_logs')
+          .select('*')
+          .eq('business_id', businessId)
+          .order('created_at', { ascending: false });
+        if (error) return { auditLogs: [], error: this.normalizeError(error) };
+        return { auditLogs: data || [], error: null };
+      } catch (err) {
+        return { auditLogs: [], error: this.normalizeError(err) };
+      }
+    }
+
+
+
     // 10. Safe Database Request Handling Utility
     async request(table, queryFn = null) {
       if (!this.client) {

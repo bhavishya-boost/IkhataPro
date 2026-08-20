@@ -224,16 +224,90 @@
       const session = this.state.currentSession;
       const userName = (session && session.user) ? session.user.name : 'System';
 
-      this.state.auditLogs.unshift({
+      const entry = {
         id: 'aud_' + Date.now() + '_' + Math.floor(Math.random()*1000),
         business_id: bId,
         user: userName,
+        user_name: userName,
         action,
         entity,
+        entity_type: entity,
         entityId,
+        entity_id: entityId,
         details: this.escapeHTML(details),
         timestamp: new Date().toISOString()
-      });
+      };
+
+      this.state.auditLogs.unshift(entry);
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.syncAuditLogToCloud(entry).then(res => {
+          if (res && res.success && res.auditLog) {
+            if (!this.state.auditLogCloudMap) this.state.auditLogCloudMap = {};
+            this.state.auditLogCloudMap[entry.id] = res.auditLog.id;
+            this.state.auditLogCloudMap[res.auditLog.id] = entry.id;
+          }
+        }).catch(err => console.warn('Audit log background sync warning:', err.message));
+      }
+    }
+
+    getNotifications(includeRead = true) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.notifications) this.state.notifications = [];
+      const notifs = this.state.notifications.filter(n => n.business_id === bId);
+      if (includeRead) return notifs;
+      return notifs.filter(n => !n.is_read);
+    }
+
+    addNotification({ type, title, message, entity_type, entity_id, is_read }) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.notifications) this.state.notifications = [];
+
+      const notif = {
+        id: 'notif_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+        business_id: bId,
+        type: type || 'INFO',
+        title: this.escapeHTML(title || 'Notification'),
+        message: this.escapeHTML(message || ''),
+        entity_type: entity_type || null,
+        entity_id: entity_id || null,
+        is_read: Boolean(is_read),
+        read_at: is_read ? new Date().toISOString() : null,
+        createdAt: new Date().toISOString()
+      };
+
+      this.state.notifications.unshift(notif);
+      this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.syncNotificationToCloud(notif, null).then(res => {
+          if (res && res.success && res.notification) {
+            if (!this.state.notificationCloudMap) this.state.notificationCloudMap = {};
+            this.state.notificationCloudMap[notif.id] = res.notification.id;
+            this.state.notificationCloudMap[res.notification.id] = notif.id;
+          }
+        }).catch(err => console.warn('Notification background sync warning:', err.message));
+      }
+
+      return notif;
+    }
+
+    markNotificationRead(notifId) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.notifications) return false;
+      const notif = this.state.notifications.find(n => n.id === notifId && n.business_id === bId);
+      if (!notif) return false;
+
+      notif.is_read = true;
+      notif.read_at = new Date().toISOString();
+      this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        const cloudUuid = this.state.notificationCloudMap ? this.state.notificationCloudMap[notifId] : null;
+        window.iKhataSupabase.syncNotificationToCloud(notif, cloudUuid).catch(err => console.warn('Notification read status sync warning:', err.message));
+      }
+
+      return true;
     }
 
     // ─── SOFT DELETE ENGINE ───────────────────────────────────────────────────
@@ -246,6 +320,7 @@
       else if (entityType === 'invoice') list = this.state.invoices;
       else if (entityType === 'expense') list = this.state.expenses;
       else if (entityType === 'supplier') list = this.state.suppliers;
+      else if (entityType === 'pos_bill' || entityType === 'bill') list = this.state.bills;
 
       const record = list.find(r => r.id === recordId && r.business_id === bId);
       if (!record) return false;
@@ -281,6 +356,13 @@
           const cloudUuid = this.state.invoiceCloudMap ? this.state.invoiceCloudMap[recordId] : null;
           const cloudCustUuid = (this.state.customerCloudMap && record.customerId) ? this.state.customerCloudMap[record.customerId] : null;
           window.iKhataSupabase.syncInvoiceToCloud(record, cloudUuid, cloudCustUuid).catch(err => console.warn('Soft delete invoice cloud sync warning:', err.message));
+        } else if (entityType === 'pos_bill' || entityType === 'bill') {
+          const cloudUuid = this.state.posBillCloudMap ? this.state.posBillCloudMap[recordId] : null;
+          const cloudCustUuid = (this.state.customerCloudMap && record.customerId) ? this.state.customerCloudMap[record.customerId] : null;
+          window.iKhataSupabase.syncPosBillToCloud(record, cloudUuid, cloudCustUuid).catch(err => console.warn('Soft delete POS bill cloud sync warning:', err.message));
+        } else if (entityType === 'expense') {
+          const cloudUuid = this.state.expenseCloudMap ? this.state.expenseCloudMap[recordId] : null;
+          window.iKhataSupabase.syncExpenseToCloud(record, cloudUuid).catch(err => console.warn('Soft delete expense cloud sync warning:', err.message));
         }
       }
 
@@ -298,6 +380,7 @@
       else if (entityType === 'supplier') list = this.state.suppliers;
       else if (entityType === 'purchase') list = this.state.purchases;
       else if (entityType === 'supplier_transaction') list = this.state.supplierTransactions;
+      else if (entityType === 'pos_bill' || entityType === 'bill') list = this.state.bills;
 
       const record = list.find(r => r.id === recordId && r.business_id === bId);
       if (!record) return false;
@@ -333,6 +416,13 @@
           const cloudUuid = this.state.invoiceCloudMap ? this.state.invoiceCloudMap[recordId] : null;
           const cloudCustUuid = (this.state.customerCloudMap && record.customerId) ? this.state.customerCloudMap[record.customerId] : null;
           window.iKhataSupabase.syncInvoiceToCloud(record, cloudUuid, cloudCustUuid).catch(err => console.warn('Restore invoice cloud sync warning:', err.message));
+        } else if (entityType === 'pos_bill' || entityType === 'bill') {
+          const cloudUuid = this.state.posBillCloudMap ? this.state.posBillCloudMap[recordId] : null;
+          const cloudCustUuid = (this.state.customerCloudMap && record.customerId) ? this.state.customerCloudMap[record.customerId] : null;
+          window.iKhataSupabase.syncPosBillToCloud(record, cloudUuid, cloudCustUuid).catch(err => console.warn('Restore POS bill cloud sync warning:', err.message));
+        } else if (entityType === 'expense') {
+          const cloudUuid = this.state.expenseCloudMap ? this.state.expenseCloudMap[recordId] : null;
+          window.iKhataSupabase.syncExpenseToCloud(record, cloudUuid).catch(err => console.warn('Restore expense cloud sync warning:', err.message));
         }
       }
 
@@ -1636,6 +1726,262 @@
       };
     }
 
+    async syncAllPosBillsWithCloud() {
+      const bId = this.getActiveBusinessId();
+      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
+        return { success: false, reason: 'Supabase client offline' };
+      }
+
+      // Pre-migration snapshot
+      const snapshotKey = `iKhataPro_snapshot_before_pos_bill_sync_${Date.now()}`;
+      try {
+        localStorage.setItem(snapshotKey, JSON.stringify(this.state));
+      } catch (e) {
+        console.warn('[Stage9] Pre-POS bill sync snapshot warning:', e);
+      }
+
+      if (!this.state.posBillCloudMap) this.state.posBillCloudMap = {};
+
+      const localBills = this.getBills(true);
+      let syncedBillsCount = 0;
+      let syncedItemsCount = 0;
+
+      for (const bill of localBills) {
+        const cloudUuid = this.state.posBillCloudMap[bill.id];
+        const cloudCustUuid = (this.state.customerCloudMap && bill.customerId)
+          ? this.state.customerCloudMap[bill.customerId]
+          : null;
+        const res = await window.iKhataSupabase.syncPosBillToCloud(bill, cloudUuid, cloudCustUuid);
+        if (res.success && res.posBill) {
+          this.state.posBillCloudMap[bill.id] = res.posBill.id;
+          this.state.posBillCloudMap[res.posBill.id] = bill.id;
+          syncedBillsCount++;
+
+          if (bill.items && bill.items.length > 0) {
+            const itemRes = await window.iKhataSupabase.syncPosBillItemsToCloud(
+              res.posBill.id,
+              bId,
+              bill.items,
+              this.state.productCloudMap || {}
+            );
+            if (itemRes.success) syncedItemsCount += (itemRes.items || []).length;
+          }
+        }
+      }
+
+      const cloudRes = await window.iKhataSupabase.fetchPosBillsFromCloud(bId);
+      const cloudBills = cloudRes.posBills || [];
+
+      // Financial reconciliation
+      let localSubtotal = 0;
+      let localTaxTotal = 0;
+      let localDiscountTotal = 0;
+      let localGrandTotal = 0;
+
+      localBills.filter(b => !b.isDeleted).forEach(b => {
+        localSubtotal      += (b.subtotal || 0);
+        localTaxTotal       += (b.taxAmt || b.tax_amount || 0);
+        localDiscountTotal  += (b.discount || 0);
+        localGrandTotal     += (b.grandTotal || b.grand_total || 0);
+      });
+
+      let cloudSubtotal = 0;
+      let cloudTaxTotal = 0;
+      let cloudDiscountTotal = 0;
+      let cloudGrandTotal = 0;
+      let cloudItemsCount = 0;
+
+      cloudBills.filter(b => !b.is_deleted).forEach(b => {
+        cloudSubtotal      += (parseFloat(b.subtotal) || 0);
+        cloudTaxTotal       += (parseFloat(b.tax_amount) || 0);
+        cloudDiscountTotal  += (parseFloat(b.discount) || 0);
+        cloudGrandTotal     += (parseFloat(b.grand_total) || 0);
+        if (Array.isArray(b.pos_bill_items)) {
+          cloudItemsCount   += b.pos_bill_items.length;
+        }
+      });
+
+      const r = (v) => Math.round(v * 100) / 100;
+      localSubtotal      = r(localSubtotal);
+      cloudSubtotal      = r(cloudSubtotal);
+      localTaxTotal       = r(localTaxTotal);
+      cloudTaxTotal       = r(cloudTaxTotal);
+      localDiscountTotal  = r(localDiscountTotal);
+      cloudDiscountTotal  = r(cloudDiscountTotal);
+      localGrandTotal     = r(localGrandTotal);
+      cloudGrandTotal     = r(cloudGrandTotal);
+
+      const discrepancy = r(Math.abs(localGrandTotal - cloudGrandTotal));
+
+      this.saveState();
+
+      return {
+        success: true,
+        businessId: bId,
+        localBillsCount: localBills.length,
+        cloudBillsCount: cloudBills.length,
+        syncedBillsCount,
+        syncedItemsCount,
+        cloudItemsCount,
+        localGrandTotal,
+        cloudGrandTotal,
+        discrepancy,
+        reconciled: discrepancy === 0,
+        snapshotKey
+      };
+    }
+
+    async syncAllExpensesWithCloud() {
+      const bId = this.getActiveBusinessId();
+      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
+        return { success: false, reason: 'Supabase client offline' };
+      }
+
+      // Pre-migration snapshot
+      const snapshotKey = `iKhataPro_snapshot_before_expense_sync_${Date.now()}`;
+      try {
+        localStorage.setItem(snapshotKey, JSON.stringify(this.state));
+      } catch (e) {
+        console.warn('[Stage10] Pre-expense sync snapshot warning:', e);
+      }
+
+      if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
+
+      const localExpenses = this.getExpenses(true);
+      let syncedCount = 0;
+
+      for (const exp of localExpenses) {
+        const cloudUuid = this.state.expenseCloudMap[exp.id];
+        const res = await window.iKhataSupabase.syncExpenseToCloud(exp, cloudUuid);
+        if (res.success && res.expense) {
+          this.state.expenseCloudMap[exp.id] = res.expense.id;
+          this.state.expenseCloudMap[res.expense.id] = exp.id;
+          syncedCount++;
+        }
+      }
+
+      const cloudRes = await window.iKhataSupabase.fetchExpensesFromCloud(bId);
+      const cloudExpenses = cloudRes.expenses || [];
+
+      let localTotal = 0;
+      localExpenses.filter(e => !e.isDeleted).forEach(e => {
+        localTotal += (e.amount || 0);
+      });
+
+      let cloudTotal = 0;
+      cloudExpenses.filter(e => !e.is_deleted).forEach(e => {
+        cloudTotal += (parseFloat(e.amount) || 0);
+      });
+
+      const r = (v) => Math.round(v * 100) / 100;
+      localTotal = r(localTotal);
+      cloudTotal = r(cloudTotal);
+      const discrepancy = r(Math.abs(localTotal - cloudTotal));
+
+      this.saveState();
+
+      return {
+        success: true,
+        businessId: bId,
+        localCount: localExpenses.length,
+        cloudCount: cloudExpenses.length,
+        syncedCount,
+        localTotal,
+        cloudTotal,
+        discrepancy,
+        reconciled: discrepancy === 0,
+        snapshotKey
+      };
+    }
+
+    async syncAllNotificationsWithCloud() {
+      const bId = this.getActiveBusinessId();
+      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
+        return { success: false, reason: 'Supabase client offline' };
+      }
+
+      const snapshotKey = `iKhataPro_snapshot_before_stage11_${Date.now()}`;
+      try {
+        localStorage.setItem(snapshotKey, JSON.stringify(this.state));
+      } catch (e) {
+        console.warn('[Stage11] Pre-notification sync snapshot warning:', e);
+      }
+
+      if (!this.state.notificationCloudMap) this.state.notificationCloudMap = {};
+
+      const localNotifs = this.getNotifications(true);
+      let syncedCount = 0;
+
+      for (const n of localNotifs) {
+        const cloudUuid = this.state.notificationCloudMap[n.id];
+        const res = await window.iKhataSupabase.syncNotificationToCloud(n, cloudUuid);
+        if (res.success && res.notification) {
+          this.state.notificationCloudMap[n.id] = res.notification.id;
+          this.state.notificationCloudMap[res.notification.id] = n.id;
+          syncedCount++;
+        }
+      }
+
+      const cloudRes = await window.iKhataSupabase.fetchNotificationsFromCloud(bId);
+      const cloudNotifs = cloudRes.notifications || [];
+
+      this.saveState();
+
+      return {
+        success: true,
+        businessId: bId,
+        localCount: localNotifs.length,
+        cloudCount: cloudNotifs.length,
+        syncedCount,
+        snapshotKey
+      };
+    }
+
+    async syncAllAuditLogsWithCloud() {
+      const bId = this.getActiveBusinessId();
+      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
+        return { success: false, reason: 'Supabase client offline' };
+      }
+
+      const snapshotKey = `iKhataPro_snapshot_before_audit_sync_${Date.now()}`;
+      try {
+        localStorage.setItem(snapshotKey, JSON.stringify(this.state));
+      } catch (e) {
+        console.warn('[Stage11] Pre-audit log sync snapshot warning:', e);
+      }
+
+      if (!this.state.auditLogCloudMap) this.state.auditLogCloudMap = {};
+
+      const localLogs = this.getAuditLogs();
+      let syncedCount = 0;
+
+      for (const log of localLogs) {
+        let cloudUuid = this.state.auditLogCloudMap[log.id];
+        if (!cloudUuid) { // Append-only: sync only if unsynced
+          const res = await window.iKhataSupabase.syncAuditLogToCloud(log);
+          if (res.success && res.auditLog) {
+            this.state.auditLogCloudMap[log.id] = res.auditLog.id;
+            this.state.auditLogCloudMap[res.auditLog.id] = log.id;
+            syncedCount++;
+          }
+        }
+      }
+
+      const cloudRes = await window.iKhataSupabase.fetchAuditLogsFromCloud(bId);
+      const cloudLogs = cloudRes.auditLogs || [];
+
+      this.saveState();
+
+      return {
+        success: true,
+        businessId: bId,
+        localCount: localLogs.length,
+        cloudCount: cloudLogs.length,
+        syncedCount,
+        snapshotKey
+      };
+    }
+
     receivePayment(customerId, amount, paymentMethod) {
       return this.addKhataTransaction({
         customerId,
@@ -1902,7 +2248,7 @@
       return false;
     }
 
-    addExpense({ category, amount, note }) {
+    addExpense({ category, amount, note, is_ocr_scanned, ocr_vendor }) {
       const bId = this.getActiveBusinessId();
       const numAmount = parseFloat(amount) || 0;
       if (numAmount <= 0) return false;
@@ -1914,12 +2260,25 @@
         category: category || 'Other',
         amount: numAmount,
         date: today,
-        note: this.escapeHTML(note || 'General Expense')
+        note: this.escapeHTML(note || 'General Expense'),
+        is_ocr_scanned: Boolean(is_ocr_scanned),
+        ocr_vendor: ocr_vendor || null
       };
 
       this.state.expenses.unshift(newExp);
       this.logAudit('EXPENSE_ADDED', 'Expense', newExp.id, `Added expense ₹${numAmount} under ${category}`);
       this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.syncExpenseToCloud(newExp, null).then(res => {
+          if (res && res.success && res.expense) {
+            if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
+            this.state.expenseCloudMap[newExp.id] = res.expense.id;
+            this.state.expenseCloudMap[res.expense.id] = newExp.id;
+          }
+        }).catch(err => console.warn('Expense background cloud sync warning:', err.message));
+      }
+
       return newExp;
     }
 
@@ -2024,12 +2383,30 @@
       this.logAudit('POS_BILL_CREATED', 'POS', billNo, `Created POS Bill ${billNo} for ₹${bill.grandTotal}`);
       this.recalculateTotals();
       this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        const cloudCustUuid = (this.state.customerCloudMap && bill.customerId)
+          ? this.state.customerCloudMap[bill.customerId]
+          : null;
+        window.iKhataSupabase.syncPosBillToCloud(bill, null, cloudCustUuid).then(res => {
+          if (res && res.success && res.posBill) {
+            if (!this.state.posBillCloudMap) this.state.posBillCloudMap = {};
+            this.state.posBillCloudMap[bill.id] = res.posBill.id;
+            this.state.posBillCloudMap[res.posBill.id] = bill.id;
+            if (bill.items && bill.items.length > 0) {
+              window.iKhataSupabase.syncPosBillItemsToCloud(res.posBill.id, bId, bill.items, this.state.productCloudMap || {});
+            }
+          }
+        }).catch(err => console.warn('POS bill background cloud sync warning:', err.message));
+      }
+
       return bill;
     }
 
-    getBills() {
+    getBills(includeDeleted = false) {
       const bId = this.getActiveBusinessId();
       if (!this.state.bills) return [];
+      if (includeDeleted) return this.state.bills.filter(b => b.business_id === bId);
       return this.state.bills.filter(b => b.business_id === bId && !b.isDeleted);
     }
 
