@@ -32,10 +32,130 @@
 
         if (document.readyState === 'complete') {
           setTimeout(triggerSync, 1500);
+          // Start periodic cloud pull after initial load
+          setTimeout(() => this.startPeriodicCloudPull(), 3000);
         } else {
-          window.addEventListener('load', () => setTimeout(triggerSync, 1500));
+          window.addEventListener('load', () => {
+            setTimeout(triggerSync, 1500);
+            setTimeout(() => this.startPeriodicCloudPull(), 3000);
+          });
         }
       }
+    }
+
+    // ── PERIODIC CLOUD PULL: Every 30s, fetch fresh data from Supabase ──
+    // This keeps both devices in sync without needing to re-login
+    startPeriodicCloudPull() {
+      if (typeof window === 'undefined') return;
+      this._cloudPullInterval = setInterval(() => {
+        const session = this.state && this.state.currentSession;
+        if (!session || !session.isAuthenticated || !session.businessId) return;
+        if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
+
+        window.iKhataSupabase.pullAllCloudDataForBusiness(session.businessId)
+          .then(cloud => {
+            if (!cloud || !cloud.success) return;
+            const bizId = session.businessId;
+            let changed = false;
+
+            // Merge new customers
+            if (cloud.customers && cloud.customers.length > 0) {
+              const localIds = new Set(this.state.customers.map(c => c.id));
+              cloud.customers.forEach(cc => {
+                if (!localIds.has(cc.id)) {
+                  this.state.customers.push({
+                    id: cc.id, name: cc.name, phone: cc.phone || '',
+                    email: cc.email || '', city: cc.city || '', address: cc.address || '',
+                    notes: cc.notes || '', balance: parseFloat(cc.balance) || 0,
+                    category: cc.category || 'Regular', score: parseInt(cc.score) || 85,
+                    isBadDebt: cc.is_bad_debt || false, businessId: bizId,
+                    lastActive: cc.last_active || null, isDeleted: cc.is_deleted || false
+                  });
+                  changed = true;
+                }
+              });
+            }
+
+            // Merge new transactions
+            if (cloud.transactions && cloud.transactions.length > 0) {
+              const localIds = new Set(this.state.transactions.map(t => t.id));
+              cloud.transactions.forEach(ct => {
+                if (!localIds.has(ct.id) && !localIds.has(ct.idempotency_key)) {
+                  this.state.transactions.push({
+                    id: ct.id, customerId: ct.customer_id || '',
+                    customerName: ct.customer_name || 'Customer',
+                    type: ct.type === 'GAVE' ? 'UDHAR' : 'JAMA',
+                    amount: parseFloat(ct.amount) || 0, date: ct.date || '',
+                    time: ct.time_str || '', mode: ct.mode || 'Cash',
+                    note: ct.note || '', businessId: bizId,
+                    isDeleted: ct.is_deleted || false
+                  });
+                  changed = true;
+                }
+              });
+            }
+
+            // Merge new products
+            if (cloud.products && cloud.products.length > 0) {
+              const localIds = new Set(this.state.products.map(p => p.id));
+              cloud.products.forEach(cp => {
+                if (!localIds.has(cp.id)) {
+                  this.state.products.push({
+                    id: cp.id, name: cp.name, description: cp.description || '',
+                    category: cp.category || 'General', sku: cp.sku || '',
+                    price: parseFloat(cp.price) || 0, cost: parseFloat(cp.cost) || 0,
+                    stock: parseInt(cp.stock) || 0, minStock: parseInt(cp.min_stock) || 5,
+                    unit: cp.unit || 'Pcs', gstRate: parseFloat(cp.gst_rate) || 18,
+                    businessId: bizId, isDeleted: cp.is_deleted || false
+                  });
+                  changed = true;
+                }
+              });
+            }
+
+            // Merge new suppliers
+            if (cloud.suppliers && cloud.suppliers.length > 0) {
+              const localIds = new Set(this.state.suppliers.map(s => s.id));
+              cloud.suppliers.forEach(cs => {
+                if (!localIds.has(cs.id)) {
+                  this.state.suppliers.push({
+                    id: cs.id, name: cs.name, businessName: cs.business_name || '',
+                    phone: cs.phone || '', email: cs.email || '', address: cs.address || '',
+                    category: cs.category || 'General Supplier',
+                    balance: parseFloat(cs.balance) || 0,
+                    businessId: bizId, active: cs.is_active !== false,
+                    isDeleted: cs.is_deleted || false
+                  });
+                  changed = true;
+                }
+              });
+            }
+
+            // Merge new expenses
+            if (cloud.expenses && cloud.expenses.length > 0) {
+              const localIds = new Set(this.state.expenses.map(e => e.id));
+              cloud.expenses.forEach(ce => {
+                if (!localIds.has(ce.id)) {
+                  this.state.expenses.push({
+                    id: ce.id, category: ce.category || 'Other',
+                    amount: parseFloat(ce.amount) || 0, date: ce.date || '',
+                    note: ce.note || '', businessId: bizId,
+                    isDeleted: ce.is_deleted || false
+                  });
+                  changed = true;
+                }
+              });
+            }
+
+            if (changed) {
+              this.recalculateTotals();
+              this.saveState();
+              this.notify(); // Refresh UI
+              console.log('🔄 [iKhataPro] Periodic sync: new data pulled from cloud');
+            }
+          })
+          .catch(err => console.warn('⚠️ [iKhataPro] Periodic pull warning:', err.message));
+      }, 30000); // Every 30 seconds
     }
 
     loadState() {
