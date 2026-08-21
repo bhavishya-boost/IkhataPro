@@ -16,6 +16,7 @@
       this.client = null;
       this.isOnline = false;
       this.initError = null;
+      this.cachedBusinessUuid = null;
       this.init();
     }
 
@@ -52,6 +53,39 @@
         this.isOnline = false;
         console.warn('⚠️ [iKhataPro] Supabase client init warning (offline mode active):', err.message);
       }
+    }
+
+    // Helper to resolve string business IDs (e.g. 'BUS_LJS') to PostgreSQL UUID
+    async resolveBusinessUuid(providedId) {
+      if (providedId && typeof providedId === 'string' && providedId.length === 36 && providedId.includes('-')) {
+        return providedId;
+      }
+      if (this.cachedBusinessUuid) return this.cachedBusinessUuid;
+      if (!this.client) return null;
+      try {
+        const { data } = await this.client.from('businesses').select('id').limit(1);
+        if (data && data.length > 0) {
+          this.cachedBusinessUuid = data[0].id;
+          return data[0].id;
+        }
+        const { data: newBiz, error } = await this.client
+          .from('businesses')
+          .insert([{
+            name: 'iKhata Main Store',
+            owner_name: 'Store Owner',
+            username: 'main_store_' + Date.now(),
+            slug: 'main-store-' + Date.now()
+          }])
+          .select('id')
+          .single();
+        if (!error && newBiz) {
+          this.cachedBusinessUuid = newBiz.id;
+          return newBiz.id;
+        }
+      } catch (err) {
+        console.warn('[resolveBusinessUuid] Warning:', err.message);
+      }
+      return null;
     }
 
     // 1. Connection Check Utility (Development & Health Safe)
@@ -280,8 +314,9 @@
           deleted_by: customerPayload.deletedBy || null
         };
 
-        if (customerPayload.business_id) {
-          payload.business_id = customerPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(customerPayload.business_id || customerPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         let response;
@@ -351,8 +386,9 @@
           deleted_by: productPayload.deletedBy || null
         };
 
-        if (productPayload.business_id) {
-          payload.business_id = productPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(productPayload.business_id || productPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         let response;
@@ -432,13 +468,17 @@
     async syncTransactionToCloud(txPayload, cloudUuid = null, mappedCustomerId = null) {
       if (!this.client) return { success: false, error: 'Offline mode' };
       try {
-        const typeStr = (txPayload.type || 'GAVE').toUpperCase();
+        let typeStr = (txPayload.type || 'GAVE').toUpperCase();
+        if (typeStr === 'UDHAR') typeStr = 'GAVE';
+        if (typeStr === 'JAMA') typeStr = 'GOT';
         const validTypes = ['GAVE', 'GOT'];
         const numAmount = Math.round((parseFloat(txPayload.amount) || 0) * 100) / 100;
 
         if (numAmount <= 0) {
           return { success: false, error: { message: 'Invalid transaction amount: must be > 0' } };
         }
+
+        const targetBusinessId = await this.resolveBusinessUuid(txPayload.business_id || txPayload.businessId);
 
         const payload = {
           customer_name: txPayload.customerName || 'Customer',
@@ -456,8 +496,8 @@
           deleted_by: txPayload.deletedBy || null
         };
 
-        if (txPayload.business_id) {
-          payload.business_id = txPayload.business_id;
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         if (mappedCustomerId) {
@@ -532,8 +572,9 @@
           deleted_by: supplierPayload.deletedBy || null
         };
 
-        if (supplierPayload.business_id) {
-          payload.business_id = supplierPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(supplierPayload.business_id || supplierPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         let response;
@@ -991,8 +1032,9 @@
           deleted_by:     expPayload.deletedBy || expPayload.deleted_by || null
         };
 
-        if (expPayload.business_id) {
-          payload.business_id = expPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(expPayload.business_id || expPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         let response;
@@ -1117,6 +1159,109 @@
     }
 
 
+
+    // Batch Migration / Initial Sync: Push full local state to Supabase
+    async pushFullLocalStateToCloud(state) {
+      if (!this.client) return { success: false, error: 'Supabase offline' };
+      if (!state) return { success: false, error: 'No state provided' };
+
+      const bizUuid = await this.resolveBusinessUuid(state.currentSession?.businessId);
+      if (!bizUuid) return { success: false, error: 'Could not resolve business UUID in Supabase' };
+
+      const customerCloudMap = state.customerCloudMap || {};
+      const productCloudMap = state.productCloudMap || {};
+      const supplierCloudMap = state.supplierCloudMap || {};
+      const transactionCloudMap = state.transactionCloudMap || {};
+
+      let syncedCustomers = 0;
+      let syncedProducts = 0;
+      let syncedTransactions = 0;
+      let syncedSuppliers = 0;
+      let syncedExpenses = 0;
+
+      // 1. Customers
+      if (Array.isArray(state.customers)) {
+        for (const cust of state.customers) {
+          const custPayload = { ...cust, business_id: bizUuid };
+          const cloudUuid = customerCloudMap[cust.id];
+          const res = await this.syncCustomerToCloud(custPayload, cloudUuid);
+          if (res.success && res.customer) {
+            customerCloudMap[cust.id] = res.customer.id;
+            customerCloudMap[res.customer.id] = cust.id;
+            syncedCustomers++;
+          }
+        }
+      }
+
+      // 2. Products
+      if (Array.isArray(state.products)) {
+        for (const prod of state.products) {
+          const prodPayload = { ...prod, business_id: bizUuid };
+          const cloudUuid = productCloudMap[prod.id];
+          const res = await this.syncProductToCloud(prodPayload, cloudUuid);
+          if (res.success && res.product) {
+            productCloudMap[prod.id] = res.product.id;
+            productCloudMap[res.product.id] = prod.id;
+            syncedProducts++;
+          }
+        }
+      }
+
+      // 3. Suppliers
+      if (Array.isArray(state.suppliers)) {
+        for (const sup of state.suppliers) {
+          const supPayload = { ...sup, business_id: bizUuid };
+          const cloudUuid = supplierCloudMap[sup.id];
+          const res = await this.syncSupplierToCloud(supPayload, cloudUuid);
+          if (res.success && res.supplier) {
+            supplierCloudMap[sup.id] = res.supplier.id;
+            supplierCloudMap[res.supplier.id] = sup.id;
+            syncedSuppliers++;
+          }
+        }
+      }
+
+      // 4. Transactions
+      if (Array.isArray(state.transactions)) {
+        for (const tx of state.transactions) {
+          const txPayload = { ...tx, business_id: bizUuid };
+          const cloudUuid = transactionCloudMap[tx.id];
+          const mappedCustUuid = customerCloudMap[tx.customerId] || null;
+          const res = await this.syncTransactionToCloud(txPayload, cloudUuid, mappedCustUuid);
+          if (res.success && res.transaction) {
+            transactionCloudMap[tx.id] = res.transaction.id;
+            transactionCloudMap[res.transaction.id] = tx.id;
+            syncedTransactions++;
+          }
+        }
+      }
+
+      // 5. Expenses
+      if (Array.isArray(state.expenses)) {
+        for (const exp of state.expenses) {
+          const expPayload = { ...exp, business_id: bizUuid };
+          const res = await this.syncExpenseToCloud(expPayload);
+          if (res.success) syncedExpenses++;
+        }
+      }
+
+      state.customerCloudMap = customerCloudMap;
+      state.productCloudMap = productCloudMap;
+      state.supplierCloudMap = supplierCloudMap;
+      state.transactionCloudMap = transactionCloudMap;
+
+      return {
+        success: true,
+        businessUuid: bizUuid,
+        counts: {
+          customers: syncedCustomers,
+          products: syncedProducts,
+          suppliers: syncedSuppliers,
+          transactions: syncedTransactions,
+          expenses: syncedExpenses
+        }
+      };
+    }
 
     // 10. Safe Database Request Handling Utility
     async request(table, queryFn = null) {

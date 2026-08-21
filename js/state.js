@@ -9,6 +9,30 @@
       this.processedTxTokens = new Set(); // Idempotency guard for double-submit prevention
       this.state = this.loadState();
       this.initSecurityDefaults();
+      this.initCloudSync();
+    }
+
+    initCloudSync() {
+      if (typeof window !== 'undefined') {
+        const triggerSync = () => {
+          if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+            window.iKhataSupabase.pushFullLocalStateToCloud(this.state)
+              .then(res => {
+                if (res && res.success) {
+                  console.log('⚡ [iKhataPro] Auto cloud sync completed:', res.counts);
+                  this.saveState();
+                }
+              })
+              .catch(err => console.warn('⚠️ [iKhataPro] Auto cloud sync warning:', err.message));
+          }
+        };
+
+        if (document.readyState === 'complete') {
+          setTimeout(triggerSync, 1500);
+        } else {
+          window.addEventListener('load', () => setTimeout(triggerSync, 1500));
+        }
+      }
     }
 
     loadState() {
