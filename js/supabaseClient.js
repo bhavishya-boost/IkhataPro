@@ -1368,6 +1368,40 @@
         hint: err.hint || null
       };
     }
+
+    // ── CROSS-DEVICE PULL: Fetch all cloud data for a business into local state ──
+    // Call this after login to populate the local state with data from Supabase
+    async pullAllCloudDataForBusiness(businessId) {
+      if (!this.client || !businessId) return { success: false, error: 'Offline or no businessId' };
+      const isUuid = businessId.length === 36 && businessId.includes('-');
+      if (!isUuid) {
+        businessId = await this.resolveBusinessUuid(businessId);
+        if (!businessId) return { success: false, error: 'Cannot resolve business UUID' };
+      }
+      try {
+        const [
+          custRes, txRes, prodRes, supRes, expRes
+        ] = await Promise.all([
+          this.fetchCustomersFromCloud(businessId),
+          this.fetchTransactionsFromCloud(businessId),
+          this.fetchProductsFromCloud(businessId),
+          this.fetchSuppliersFromCloud(businessId),
+          this.fetchExpensesFromCloud(businessId)
+        ]);
+
+        return {
+          success: true,
+          businessId,
+          customers: custRes.customers || [],
+          transactions: txRes.transactions || [],
+          products: prodRes.products || [],
+          suppliers: supRes.suppliers || [],
+          expenses: expRes.expenses || []
+        };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
   }
 
   const instance = new SupabaseClientWrapper();

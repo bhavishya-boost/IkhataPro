@@ -15,6 +15,9 @@
     initCloudSync() {
       if (typeof window !== 'undefined') {
         const triggerSync = () => {
+          // Only push to cloud if user is authenticated (avoid overwriting cloud with empty state)
+          const session = this.state && this.state.currentSession;
+          if (!session || !session.isAuthenticated) return;
           if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
             window.iKhataSupabase.pushFullLocalStateToCloud(this.state)
               .then(res => {
@@ -1093,6 +1096,132 @@
 
       this.logAudit('USER_LOGIN', 'Session', business.id, `User ${business.ownerName} logged in`);
       this.saveState();
+
+      // ── CROSS-DEVICE PULL: After login, fetch all data from Supabase and merge into local state ──
+      if (typeof window !== 'undefined' && window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.pullAllCloudDataForBusiness(business.id)
+          .then(cloud => {
+            if (!cloud || !cloud.success) return;
+            const bizId = business.id;
+
+            // Merge customers (add cloud records not in local)
+            if (cloud.customers && cloud.customers.length > 0) {
+              const localCustomerIds = new Set(this.state.customers.map(c => c.id));
+              cloud.customers.forEach(cc => {
+                if (!localCustomerIds.has(cc.id)) {
+                  this.state.customers.push({
+                    id: cc.id,
+                    name: cc.name,
+                    phone: cc.phone || '',
+                    email: cc.email || '',
+                    city: cc.city || '',
+                    address: cc.address || '',
+                    notes: cc.notes || '',
+                    balance: parseFloat(cc.balance) || 0,
+                    category: cc.category || 'Regular',
+                    score: parseInt(cc.score) || 85,
+                    isBadDebt: cc.is_bad_debt || false,
+                    businessId: bizId,
+                    lastActive: cc.last_active || null,
+                    isDeleted: cc.is_deleted || false
+                  });
+                }
+              });
+            }
+
+            // Merge transactions (add cloud records not in local)
+            if (cloud.transactions && cloud.transactions.length > 0) {
+              const localTxIds = new Set(this.state.transactions.map(t => t.id));
+              cloud.transactions.forEach(ct => {
+                if (!localTxIds.has(ct.id) && !localTxIds.has(ct.idempotency_key)) {
+                  this.state.transactions.push({
+                    id: ct.id,
+                    customerId: ct.customer_id || '',
+                    customerName: ct.customer_name || 'Customer',
+                    type: ct.type === 'GAVE' ? 'UDHAR' : 'JAMA',
+                    amount: parseFloat(ct.amount) || 0,
+                    date: ct.date || '',
+                    time: ct.time_str || '',
+                    mode: ct.mode || 'Cash',
+                    note: ct.note || '',
+                    businessId: bizId,
+                    isDeleted: ct.is_deleted || false
+                  });
+                }
+              });
+            }
+
+            // Merge products
+            if (cloud.products && cloud.products.length > 0) {
+              const localProdIds = new Set(this.state.products.map(p => p.id));
+              cloud.products.forEach(cp => {
+                if (!localProdIds.has(cp.id)) {
+                  this.state.products.push({
+                    id: cp.id,
+                    name: cp.name,
+                    description: cp.description || '',
+                    category: cp.category || 'General',
+                    sku: cp.sku || '',
+                    price: parseFloat(cp.price) || 0,
+                    cost: parseFloat(cp.cost) || 0,
+                    stock: parseInt(cp.stock) || 0,
+                    minStock: parseInt(cp.min_stock) || 5,
+                    unit: cp.unit || 'Pcs',
+                    gstRate: parseFloat(cp.gst_rate) || 18,
+                    businessId: bizId,
+                    isDeleted: cp.is_deleted || false
+                  });
+                }
+              });
+            }
+
+            // Merge suppliers
+            if (cloud.suppliers && cloud.suppliers.length > 0) {
+              const localSupIds = new Set(this.state.suppliers.map(s => s.id));
+              cloud.suppliers.forEach(cs => {
+                if (!localSupIds.has(cs.id)) {
+                  this.state.suppliers.push({
+                    id: cs.id,
+                    name: cs.name,
+                    businessName: cs.business_name || '',
+                    phone: cs.phone || '',
+                    email: cs.email || '',
+                    address: cs.address || '',
+                    category: cs.category || 'General Supplier',
+                    balance: parseFloat(cs.balance) || 0,
+                    businessId: bizId,
+                    active: cs.is_active !== false,
+                    isDeleted: cs.is_deleted || false
+                  });
+                }
+              });
+            }
+
+            // Merge expenses
+            if (cloud.expenses && cloud.expenses.length > 0) {
+              const localExpIds = new Set(this.state.expenses.map(e => e.id));
+              cloud.expenses.forEach(ce => {
+                if (!localExpIds.has(ce.id)) {
+                  this.state.expenses.push({
+                    id: ce.id,
+                    category: ce.category || 'Other',
+                    amount: parseFloat(ce.amount) || 0,
+                    date: ce.date || '',
+                    note: ce.note || '',
+                    businessId: bizId,
+                    isDeleted: ce.is_deleted || false
+                  });
+                }
+              });
+            }
+
+            this.saveState();
+            this.notify();
+            console.log(`✅ [iKhataPro] Cross-device sync complete — customers:${cloud.customers.length} txns:${cloud.transactions.length} products:${cloud.products.length}`);
+          })
+          .catch(err => console.warn('⚠️ [iKhataPro] Cross-device pull warning:', err.message));
+      }
+
       return { success: true, business };
     }
 
