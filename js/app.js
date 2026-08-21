@@ -201,8 +201,8 @@ window.iKhataUI = {
     }
   },
 
-  quickLogin(username, password, slug) {
-    const result = window.iKhataStore.login(username, password, slug);
+  async quickLogin(username, password, slug) {
+    const result = await window.iKhataStore.login(username, password, slug);
     if (result.success) {
       this.showToast(`🎉 Welcome back! Signed in to ${result.business.name}`, 'success');
       this.navigateToWorkspace(result.business.slug);
@@ -211,7 +211,7 @@ window.iKhataUI = {
     }
   },
 
-  submitLogin(form) {
+  async submitLogin(form) {
     const usernameInput = form.querySelector('[name="username"]');
     const passwordInput = form.querySelector('[name="password"]');
     const username = usernameInput ? usernameInput.value.trim() : '';
@@ -222,7 +222,7 @@ window.iKhataUI = {
       return;
     }
 
-    const result = window.iKhataStore.login(username, password);
+    const result = await window.iKhataStore.login(username, password);
     if (result.success) {
       this.showToast(`🎉 Welcome back, ${result.business.ownerName}!`, 'success');
       this.navigateToWorkspace(result.business.slug);

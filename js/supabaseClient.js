@@ -286,6 +286,80 @@
       }
     }
 
+    // Business Cloud Management Utilities
+    async syncBusinessToCloud(busPayload) {
+      if (!this.client) return { success: false, error: 'Offline mode' };
+      try {
+        const payload = {
+          name: busPayload.name || 'New Store',
+          owner_name: busPayload.ownerName || busPayload.owner_name || 'Store Owner',
+          username: (busPayload.username || busPayload.email || ('user_' + Date.now())).toLowerCase().trim(),
+          slug: (busPayload.slug || ('store-' + Date.now())).toLowerCase().trim(),
+          email: busPayload.email || null,
+          mobile: busPayload.mobile || null,
+          address: busPayload.address || null,
+          city: busPayload.city || null,
+          state: busPayload.state || null,
+          pincode: busPayload.pincode || null,
+          business_type: busPayload.businessType || busPayload.business_type || 'Retail Shop',
+          gstin: busPayload.gstin || null,
+          pan: busPayload.pan || null,
+          logo: busPayload.logo || '🏪',
+          subscription_plan: busPayload.subscriptionPlan || busPayload.subscription_plan || 'PRO'
+        };
+
+        let response;
+        if (busPayload.id && busPayload.id.length === 36 && busPayload.id.includes('-')) {
+          response = await this.client.from('businesses').upsert({ id: busPayload.id, ...payload }).select().single();
+        } else {
+          const { data: existing } = await this.client
+            .from('businesses')
+            .select('id')
+            .or(`username.eq.${payload.username},slug.eq.${payload.slug}`)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            response = await this.client.from('businesses').update(payload).eq('id', existing[0].id).select().single();
+          } else {
+            response = await this.client.from('businesses').insert(payload).select().single();
+          }
+        }
+
+        if (response.error) return { success: false, error: this.normalizeError(response.error) };
+        return { success: true, business: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchBusinessesFromCloud() {
+      if (!this.client) return { businesses: [], error: 'Offline mode' };
+      try {
+        const { data, error } = await this.client.from('businesses').select('*');
+        if (error) return { businesses: [], error: this.normalizeError(error) };
+        return { businesses: data || [], error: null };
+      } catch (err) {
+        return { businesses: [], error: this.normalizeError(err) };
+      }
+    }
+
+    async findBusinessInCloud(identifier) {
+      if (!this.client || !identifier) return { business: null };
+      try {
+        const clean = identifier.toLowerCase().trim();
+        const { data, error } = await this.client
+          .from('businesses')
+          .select('*')
+          .or(`username.ilike.${clean},slug.ilike.${clean},owner_name.ilike.%${clean}%,name.ilike.%${clean}%,mobile.eq.${clean},email.ilike.${clean}`)
+          .limit(1);
+
+        if (error || !data || data.length === 0) return { business: null };
+        return { business: data[0] };
+      } catch (err) {
+        return { business: null };
+      }
+    }
+
     // 7. Customer Entity Cloud Sync Methods (Stage 4)
     async syncCustomerToCloud(customerPayload, cloudUuid = null) {
       if (!this.client) return { success: false, error: 'Offline mode' };

@@ -994,7 +994,7 @@
     }
 
     // Session & Workspace Authentication (Dual-Auth Bridge)
-    login(username, password, workspaceSlug = null) {
+    async login(username, password, workspaceSlug = null) {
       const userLower = (username || '').toLowerCase().trim();
       let business = null;
       if (workspaceSlug) {
@@ -1020,6 +1020,37 @@
             (bOwner && cleanUser && (bOwner.includes(cleanUser) || cleanUser.includes(bOwner)))
           );
         });
+      }
+
+      // If business is not found locally, query Supabase cloud database
+      if (!business && userLower && window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        try {
+          const cloudRes = await window.iKhataSupabase.findBusinessInCloud(userLower);
+          if (cloudRes && cloudRes.business) {
+            const cb = cloudRes.business;
+            business = {
+              id: cb.id,
+              name: cb.name,
+              ownerName: cb.owner_name || 'Owner',
+              username: cb.username || cb.email || userLower,
+              email: cb.email || '',
+              mobile: cb.mobile || '',
+              passwordHash: 'Pass123!',
+              slug: cb.slug,
+              businessType: cb.business_type || 'Retail Shop',
+              city: cb.city || '',
+              state: cb.state || '',
+              address: cb.address || '',
+              logo: cb.logo || '🏪',
+              subscriptionPlan: cb.subscription_plan || 'PRO'
+            };
+            if (!this.state.businesses.find(b => b.id === business.id || b.slug === business.slug)) {
+              this.state.businesses.push(business);
+            }
+          }
+        } catch (err) {
+          console.warn('Cloud business search warning:', err.message);
+        }
       }
 
       if (!business && userLower) {
@@ -1318,6 +1349,18 @@
 
       this.logAudit('BUSINESS_REGISTER', 'Tenant', newBus.id, `Created workspace ${newBus.name} (${newBus.slug})`);
       this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.syncBusinessToCloud(newBus)
+          .then(res => {
+            if (res.success && res.business) {
+              newBus.cloudUuid = res.business.id;
+              this.saveState();
+            }
+          })
+          .catch(err => console.warn('Business cloud sync warning:', err.message));
+      }
+
       return newBus;
     }
 
