@@ -309,10 +309,20 @@
 
     // Helper to verify business membership
     isRecordForActiveBusiness(record) {
+      const session = this.state.currentSession;
+      const isSupabaseAuth = session && session.authSource === 'SUPABASE';
       const bId = this.getActiveBusinessId();
       const cachedUuid = window.iKhataSupabase ? window.iKhataSupabase.cachedBusinessUuid : null;
       const recBId = record.business_id || record.businessId;
-      if (!recBId) return true; // Default legacy records
+
+      if (isSupabaseAuth) {
+        // Authenticated personal user: STRICT isolation, match only their specific business UUID
+        if (!recBId) return false;
+        return recBId === bId || (cachedUuid && recBId === cachedUuid);
+      }
+
+      // Guest / Demo Mode
+      if (!recBId) return bId === 'BUS_LJS';
       return recBId === bId || (cachedUuid && recBId === cachedUuid);
     }
 
@@ -1389,7 +1399,7 @@
       const { profile } = await window.iKhataSupabase.getUserProfile(user.id);
       const { memberships } = await window.iKhataSupabase.getUserBusinessMemberships(user.id);
 
-      let targetBusId = this.getActiveBusinessId();
+      let targetBusId = null;
       let role = 'OWNER';
 
       if (memberships && memberships.length > 0) {
@@ -1410,9 +1420,22 @@
           };
           this.state.businesses.push(localBus);
         }
+      } else {
+        targetBusId = await window.iKhataSupabase.resolveBusinessUuid(null);
       }
 
-      const bus = this.state.businesses.find(b => b.id === targetBusId) || this.getCurrentBusiness();
+      let bus = this.state.businesses.find(b => b.id === targetBusId);
+      if (!bus && targetBusId) {
+        bus = {
+          id: targetBusId,
+          name: (profile && profile.full_name) ? `${profile.full_name}'s Shop` : 'My Personal Shop',
+          ownerName: (profile && profile.full_name) || user.email.split('@')[0],
+          username: user.email,
+          slug: 'shop-' + targetBusId.slice(0, 8),
+          subscriptionPlan: 'PRO'
+        };
+        this.state.businesses.push(bus);
+      }
 
       this.state.currentSession = {
         isAuthenticated: true,
@@ -1488,8 +1511,11 @@
       const activeBusId = this.getActiveBusinessId();
       this.logAudit('USER_LOGOUT', 'Session', activeBusId, `User logged out`);
 
-      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
-        window.iKhataSupabase.signOut().catch(err => console.warn('Background Supabase signout warning:', err.message));
+      if (window.iKhataSupabase) {
+        window.iKhataSupabase.cachedBusinessUuid = null;
+        if (window.iKhataSupabase.isOnline) {
+          window.iKhataSupabase.signOut().catch(err => console.warn('Background Supabase signout warning:', err.message));
+        }
       }
 
       this.state.currentSession = {

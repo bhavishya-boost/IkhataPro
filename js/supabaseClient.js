@@ -61,47 +61,65 @@
         this.cachedBusinessUuid = providedId;
         return providedId;
       }
-      if (this.cachedBusinessUuid) return this.cachedBusinessUuid;
+      if (this.cachedBusinessUuid && (!providedId || providedId === this.cachedBusinessUuid)) {
+        return this.cachedBusinessUuid;
+      }
       if (!this.client) return null;
 
       try {
-        // 1. Check if user is logged into Supabase Auth session and has active membership
+        // 1. Check if user is logged into Supabase Auth session
         const { data: sessionData } = await this.client.auth.getSession();
         if (sessionData && sessionData.session && sessionData.session.user) {
+          const user = sessionData.session.user;
           const { data: mems } = await this.client
             .from('business_members')
             .select('business_id')
-            .eq('user_id', sessionData.session.user.id)
+            .eq('user_id', user.id)
             .eq('is_active', true)
             .limit(1);
+
           if (mems && mems.length > 0 && mems[0].business_id) {
             this.cachedBusinessUuid = mems[0].business_id;
             return mems[0].business_id;
           }
+
+          // Auto-create isolated tenant workspace for this authenticated user
+          const ownerName = (user.user_metadata && user.user_metadata.full_name) || user.email.split('@')[0];
+          const uniqueSlug = 'store-' + user.id.slice(0, 8) + '-' + Date.now();
+          const { data: newBiz, error: createErr } = await this.client
+            .from('businesses')
+            .insert([{
+              name: `${ownerName}'s Shop`,
+              owner_name: ownerName,
+              username: user.email,
+              slug: uniqueSlug
+            }])
+            .select('id')
+            .single();
+
+          if (!createErr && newBiz) {
+            await this.client.from('business_members').insert([{
+              user_id: user.id,
+              business_id: newBiz.id,
+              role: 'OWNER',
+              is_active: true
+            }]);
+            this.cachedBusinessUuid = newBiz.id;
+            return newBiz.id;
+          }
         }
 
-        // 2. Query businesses table
-        const { data, error } = await this.client.from('businesses').select('id').limit(1);
-        if (!error && data && data.length > 0) {
-          this.cachedBusinessUuid = data[0].id;
-          return data[0].id;
-        }
-
-        // 3. Fallback: Create default business row if table is empty or unlinked
-        const uniqueSlug = 'main-store-' + Date.now();
-        const { data: newBiz, error: createErr } = await this.client
-          .from('businesses')
-          .insert([{
-            name: 'iKhata Main Store',
-            owner_name: 'Store Owner',
-            username: 'main_store_' + Date.now(),
-            slug: uniqueSlug
-          }])
-          .select('id')
-          .single();
-        if (!createErr && newBiz) {
-          this.cachedBusinessUuid = newBiz.id;
-          return newBiz.id;
+        // 2. Demo / Guest Mode Fallback
+        if (providedId && typeof providedId === 'string' && !providedId.includes('-')) {
+          const { data: existingBiz } = await this.client
+            .from('businesses')
+            .select('id')
+            .or(`slug.eq.${providedId},username.eq.${providedId}`)
+            .limit(1);
+          if (existingBiz && existingBiz.length > 0) {
+            this.cachedBusinessUuid = existingBiz[0].id;
+            return existingBiz[0].id;
+          }
         }
       } catch (err) {
         console.warn('[resolveBusinessUuid] Warning:', err.message);
