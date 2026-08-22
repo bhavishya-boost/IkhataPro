@@ -307,53 +307,54 @@
       return true;
     }
 
+    // Helper to verify business membership
+    isRecordForActiveBusiness(record) {
+      const bId = this.getActiveBusinessId();
+      const cachedUuid = window.iKhataSupabase ? window.iKhataSupabase.cachedBusinessUuid : null;
+      const recBId = record.business_id || record.businessId;
+      if (!recBId) return true; // Default legacy records
+      return recBId === bId || (cachedUuid && recBId === cachedUuid);
+    }
+
     // ─── DATA QUERIES (Scoped strictly by business_id & soft-delete filter) ──
     getCustomers(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.customers) this.state.customers = [];
-      return this.state.customers.filter(c => c.business_id === bId && (includeDeleted || !c.isDeleted));
+      return this.state.customers.filter(c => this.isRecordForActiveBusiness(c) && (includeDeleted || !c.isDeleted));
     }
 
     getProducts(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.products) this.state.products = [];
-      return this.state.products.filter(p => p.business_id === bId && (includeDeleted || !p.isDeleted));
+      return this.state.products.filter(p => this.isRecordForActiveBusiness(p) && (includeDeleted || !p.isDeleted));
     }
 
     getTransactions(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.transactions) this.state.transactions = [];
-      return this.state.transactions.filter(t => t.business_id === bId && (includeDeleted || !t.isDeleted));
+      return this.state.transactions.filter(t => this.isRecordForActiveBusiness(t) && (includeDeleted || !t.isDeleted));
     }
 
     getInvoices(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.invoices) this.state.invoices = [];
-      return this.state.invoices.filter(i => i.business_id === bId && (includeDeleted || !i.isDeleted));
+      return this.state.invoices.filter(i => this.isRecordForActiveBusiness(i) && (includeDeleted || !i.isDeleted));
     }
 
     getExpenses(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.expenses) this.state.expenses = [];
-      return this.state.expenses.filter(e => e.business_id === bId && (includeDeleted || !e.isDeleted));
+      return this.state.expenses.filter(e => this.isRecordForActiveBusiness(e) && (includeDeleted || !e.isDeleted));
     }
 
     getSuppliers(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.suppliers) this.state.suppliers = [];
-      return this.state.suppliers.filter(s => s.business_id === bId && (includeDeleted || !s.isDeleted));
+      return this.state.suppliers.filter(s => this.isRecordForActiveBusiness(s) && (includeDeleted || !s.isDeleted));
     }
 
     getPurchases(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
       if (!this.state.purchases) this.state.purchases = [];
-      return this.state.purchases.filter(p => p.business_id === bId && (includeDeleted || !p.isDeleted));
+      return this.state.purchases.filter(p => this.isRecordForActiveBusiness(p) && (includeDeleted || !p.isDeleted));
     }
 
     getEmployees() {
-      const bId = this.getActiveBusinessId();
       if (!this.state.employees) this.state.employees = [];
-      return this.state.employees.filter(emp => emp.business_id === bId && !emp.isDeleted);
+      return this.state.employees.filter(emp => this.isRecordForActiveBusiness(emp) && !emp.isDeleted);
     }
 
     addEmployee(empData) {
@@ -1224,12 +1225,19 @@
             if (!cloud || !cloud.success) return;
             const bizId = business.id;
 
+            if (!this.state.customerCloudMap) this.state.customerCloudMap = {};
+            if (!this.state.transactionCloudMap) this.state.transactionCloudMap = {};
+            if (!this.state.productCloudMap) this.state.productCloudMap = {};
+            if (!this.state.supplierCloudMap) this.state.supplierCloudMap = {};
+            if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
+
             // Merge customers (add cloud records not in local)
             if (cloud.customers && cloud.customers.length > 0) {
               const localCustomerIds = new Set(this.state.customers.map(c => c.id));
               cloud.customers.forEach(cc => {
+                this.state.customerCloudMap[cc.id] = cc.id;
                 if (!localCustomerIds.has(cc.id)) {
-                  this.state.customers.push({
+                  const custObj = {
                     id: cc.id,
                     name: cc.name,
                     phone: cc.phone || '',
@@ -1241,10 +1249,12 @@
                     category: cc.category || 'Regular',
                     score: parseInt(cc.score) || 85,
                     isBadDebt: cc.is_bad_debt || false,
+                    business_id: bizId,
                     businessId: bizId,
                     lastActive: cc.last_active || null,
                     isDeleted: cc.is_deleted || false
-                  });
+                  };
+                  this.state.customers.push(custObj);
                 }
               });
             }
@@ -1253,17 +1263,27 @@
             if (cloud.transactions && cloud.transactions.length > 0) {
               const localTxIds = new Set(this.state.transactions.map(t => t.id));
               cloud.transactions.forEach(ct => {
+                this.state.transactionCloudMap[ct.id] = ct.id;
                 if (!localTxIds.has(ct.id) && !localTxIds.has(ct.idempotency_key)) {
+                  let txType = (ct.type || 'GAVE').toUpperCase();
+                  if (txType === 'UDHAR') txType = 'GAVE';
+                  if (txType === 'JAMA') txType = 'GOT';
+
+                  const mappedCustId = (this.state.customerCloudMap && ct.customer_id) 
+                    ? (this.state.customerCloudMap[ct.customer_id] || ct.customer_id)
+                    : ct.customer_id;
+
                   this.state.transactions.push({
                     id: ct.id,
-                    customerId: ct.customer_id || '',
+                    customerId: mappedCustId || '',
                     customerName: ct.customer_name || 'Customer',
-                    type: ct.type === 'GAVE' ? 'UDHAR' : 'JAMA',
+                    type: txType === 'GOT' ? 'GOT' : 'GAVE',
                     amount: parseFloat(ct.amount) || 0,
                     date: ct.date || '',
                     time: ct.time_str || '',
                     mode: ct.mode || 'Cash',
                     note: ct.note || '',
+                    business_id: bizId,
                     businessId: bizId,
                     isDeleted: ct.is_deleted || false
                   });
@@ -1275,6 +1295,7 @@
             if (cloud.products && cloud.products.length > 0) {
               const localProdIds = new Set(this.state.products.map(p => p.id));
               cloud.products.forEach(cp => {
+                this.state.productCloudMap[cp.id] = cp.id;
                 if (!localProdIds.has(cp.id)) {
                   this.state.products.push({
                     id: cp.id,
@@ -1288,6 +1309,7 @@
                     minStock: parseInt(cp.min_stock) || 5,
                     unit: cp.unit || 'Pcs',
                     gstRate: parseFloat(cp.gst_rate) || 18,
+                    business_id: bizId,
                     businessId: bizId,
                     isDeleted: cp.is_deleted || false
                   });
@@ -1299,6 +1321,7 @@
             if (cloud.suppliers && cloud.suppliers.length > 0) {
               const localSupIds = new Set(this.state.suppliers.map(s => s.id));
               cloud.suppliers.forEach(cs => {
+                this.state.supplierCloudMap[cs.id] = cs.id;
                 if (!localSupIds.has(cs.id)) {
                   this.state.suppliers.push({
                     id: cs.id,
@@ -1309,6 +1332,7 @@
                     address: cs.address || '',
                     category: cs.category || 'General Supplier',
                     balance: parseFloat(cs.balance) || 0,
+                    business_id: bizId,
                     businessId: bizId,
                     active: cs.is_active !== false,
                     isDeleted: cs.is_deleted || false
@@ -1321,6 +1345,7 @@
             if (cloud.expenses && cloud.expenses.length > 0) {
               const localExpIds = new Set(this.state.expenses.map(e => e.id));
               cloud.expenses.forEach(ce => {
+                this.state.expenseCloudMap[ce.id] = ce.id;
                 if (!localExpIds.has(ce.id)) {
                   this.state.expenses.push({
                     id: ce.id,
@@ -1328,6 +1353,7 @@
                     amount: parseFloat(ce.amount) || 0,
                     date: ce.date || '',
                     note: ce.note || '',
+                    business_id: bizId,
                     businessId: bizId,
                     isDeleted: ce.is_deleted || false
                   });
@@ -1404,6 +1430,15 @@
 
       this.logAudit('USER_LOGIN_SUPABASE', 'Session', targetBusId, `User ${this.state.currentSession.user.name} logged in via Supabase Auth`);
       this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.resolveBusinessUuid(targetBusId).then(resolvedUuid => {
+          if (resolvedUuid) {
+            window.iKhataSupabase.pullAllCloudDataForBusiness(resolvedUuid);
+          }
+        });
+      }
+
       return { success: true, business: bus, session: this.state.currentSession };
     }
 
@@ -1434,6 +1469,12 @@
             supabaseSession: session
           };
           this.saveState();
+
+          window.iKhataSupabase.resolveBusinessUuid(activeMem.business_id).then(resolvedUuid => {
+            if (resolvedUuid) {
+              window.iKhataSupabase.pullAllCloudDataForBusiness(resolvedUuid);
+            }
+          });
           return true;
         }
       } else if (this.state.currentSession && this.state.currentSession.authSource === 'SUPABASE') {

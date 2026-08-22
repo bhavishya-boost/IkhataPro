@@ -58,27 +58,48 @@
     // Helper to resolve string business IDs (e.g. 'BUS_LJS') to PostgreSQL UUID
     async resolveBusinessUuid(providedId) {
       if (providedId && typeof providedId === 'string' && providedId.length === 36 && providedId.includes('-')) {
+        this.cachedBusinessUuid = providedId;
         return providedId;
       }
       if (this.cachedBusinessUuid) return this.cachedBusinessUuid;
       if (!this.client) return null;
+
       try {
-        const { data } = await this.client.from('businesses').select('id').limit(1);
-        if (data && data.length > 0) {
+        // 1. Check if user is logged into Supabase Auth session and has active membership
+        const { data: sessionData } = await this.client.auth.getSession();
+        if (sessionData && sessionData.session && sessionData.session.user) {
+          const { data: mems } = await this.client
+            .from('business_members')
+            .select('business_id')
+            .eq('user_id', sessionData.session.user.id)
+            .eq('is_active', true)
+            .limit(1);
+          if (mems && mems.length > 0 && mems[0].business_id) {
+            this.cachedBusinessUuid = mems[0].business_id;
+            return mems[0].business_id;
+          }
+        }
+
+        // 2. Query businesses table
+        const { data, error } = await this.client.from('businesses').select('id').limit(1);
+        if (!error && data && data.length > 0) {
           this.cachedBusinessUuid = data[0].id;
           return data[0].id;
         }
-        const { data: newBiz, error } = await this.client
+
+        // 3. Fallback: Create default business row if table is empty or unlinked
+        const uniqueSlug = 'main-store-' + Date.now();
+        const { data: newBiz, error: createErr } = await this.client
           .from('businesses')
           .insert([{
             name: 'iKhata Main Store',
             owner_name: 'Store Owner',
             username: 'main_store_' + Date.now(),
-            slug: 'main-store-' + Date.now()
+            slug: uniqueSlug
           }])
           .select('id')
           .single();
-        if (!error && newBiz) {
+        if (!createErr && newBiz) {
           this.cachedBusinessUuid = newBiz.id;
           return newBiz.id;
         }
@@ -574,10 +595,30 @@
           payload.business_id = targetBusinessId;
         }
 
-        if (mappedCustomerId) {
-          payload.customer_id = mappedCustomerId;
-        } else if (txPayload.customerId && txPayload.customerId.length === 36 && txPayload.customerId.includes('-')) {
-          payload.customer_id = txPayload.customerId;
+        let cloudCustUuid = mappedCustomerId;
+        if (!cloudCustUuid && txPayload.customerId) {
+          if (txPayload.customerId.length === 36 && txPayload.customerId.includes('-')) {
+            cloudCustUuid = txPayload.customerId;
+          } else if (typeof window !== 'undefined' && window.iKhataStore) {
+            cloudCustUuid = (window.iKhataStore.state.customerCloudMap && window.iKhataStore.state.customerCloudMap[txPayload.customerId]) || null;
+            if (!cloudCustUuid) {
+              const localCust = window.iKhataStore.getCustomers(true).find(c => c.id === txPayload.customerId);
+              if (localCust) {
+                const syncCustRes = await this.syncCustomerToCloud(localCust);
+                if (syncCustRes && syncCustRes.success && syncCustRes.customer) {
+                  cloudCustUuid = syncCustRes.customer.id;
+                  if (!window.iKhataStore.state.customerCloudMap) window.iKhataStore.state.customerCloudMap = {};
+                  window.iKhataStore.state.customerCloudMap[localCust.id] = cloudCustUuid;
+                  window.iKhataStore.state.customerCloudMap[cloudCustUuid] = localCust.id;
+                  window.iKhataStore.saveState();
+                }
+              }
+            }
+          }
+        }
+
+        if (cloudCustUuid && cloudCustUuid.length === 36 && cloudCustUuid.includes('-')) {
+          payload.customer_id = cloudCustUuid;
         }
 
         let response;
@@ -903,12 +944,35 @@
           deleted_by:      invPayload.deletedBy || null
         };
 
-        if (invPayload.business_id) payload.business_id = invPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(invPayload.business_id || invPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
+        }
 
-        if (mappedCustomerId && mappedCustomerId.length === 36 && mappedCustomerId.includes('-')) {
-          payload.customer_id = mappedCustomerId;
-        } else if (invPayload.customerId && invPayload.customerId.length === 36 && invPayload.customerId.includes('-')) {
-          payload.customer_id = invPayload.customerId;
+        let cloudCustUuid = mappedCustomerId;
+        if (!cloudCustUuid && invPayload.customerId) {
+          if (invPayload.customerId.length === 36 && invPayload.customerId.includes('-')) {
+            cloudCustUuid = invPayload.customerId;
+          } else if (typeof window !== 'undefined' && window.iKhataStore) {
+            cloudCustUuid = (window.iKhataStore.state.customerCloudMap && window.iKhataStore.state.customerCloudMap[invPayload.customerId]) || null;
+            if (!cloudCustUuid) {
+              const localCust = window.iKhataStore.getCustomers(true).find(c => c.id === invPayload.customerId);
+              if (localCust) {
+                const syncCustRes = await this.syncCustomerToCloud(localCust);
+                if (syncCustRes && syncCustRes.success && syncCustRes.customer) {
+                  cloudCustUuid = syncCustRes.customer.id;
+                  if (!window.iKhataStore.state.customerCloudMap) window.iKhataStore.state.customerCloudMap = {};
+                  window.iKhataStore.state.customerCloudMap[localCust.id] = cloudCustUuid;
+                  window.iKhataStore.state.customerCloudMap[cloudCustUuid] = localCust.id;
+                  window.iKhataStore.saveState();
+                }
+              }
+            }
+          }
+        }
+
+        if (cloudCustUuid && cloudCustUuid.length === 36 && cloudCustUuid.includes('-')) {
+          payload.customer_id = cloudCustUuid;
         } else {
           payload.customer_id = null;
         }
@@ -1010,12 +1074,35 @@
           deleted_by:      billPayload.deletedBy || billPayload.deleted_by || null
         };
 
-        if (billPayload.business_id) payload.business_id = billPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(billPayload.business_id || billPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
+        }
 
-        if (mappedCustomerId && mappedCustomerId.length === 36 && mappedCustomerId.includes('-')) {
-          payload.customer_id = mappedCustomerId;
-        } else if (billPayload.customerId && billPayload.customerId.length === 36 && billPayload.customerId.includes('-')) {
-          payload.customer_id = billPayload.customerId;
+        let cloudCustUuid = mappedCustomerId;
+        if (!cloudCustUuid && billPayload.customerId) {
+          if (billPayload.customerId.length === 36 && billPayload.customerId.includes('-')) {
+            cloudCustUuid = billPayload.customerId;
+          } else if (typeof window !== 'undefined' && window.iKhataStore) {
+            cloudCustUuid = (window.iKhataStore.state.customerCloudMap && window.iKhataStore.state.customerCloudMap[billPayload.customerId]) || null;
+            if (!cloudCustUuid) {
+              const localCust = window.iKhataStore.getCustomers(true).find(c => c.id === billPayload.customerId);
+              if (localCust) {
+                const syncCustRes = await this.syncCustomerToCloud(localCust);
+                if (syncCustRes && syncCustRes.success && syncCustRes.customer) {
+                  cloudCustUuid = syncCustRes.customer.id;
+                  if (!window.iKhataStore.state.customerCloudMap) window.iKhataStore.state.customerCloudMap = {};
+                  window.iKhataStore.state.customerCloudMap[localCust.id] = cloudCustUuid;
+                  window.iKhataStore.state.customerCloudMap[cloudCustUuid] = localCust.id;
+                  window.iKhataStore.saveState();
+                }
+              }
+            }
+          }
+        }
+
+        if (cloudCustUuid && cloudCustUuid.length === 36 && cloudCustUuid.includes('-')) {
+          payload.customer_id = cloudCustUuid;
         } else {
           payload.customer_id = null;
         }
@@ -1155,8 +1242,9 @@
           read_at:     notifPayload.read_at || notifPayload.readAt || null
         };
 
-        if (notifPayload.business_id) {
-          payload.business_id = notifPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(notifPayload.business_id || notifPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         if (notifPayload.user_id && notifPayload.user_id.length === 36 && notifPayload.user_id.includes('-')) {
@@ -1203,8 +1291,9 @@
           details:     auditPayload.details || null
         };
 
-        if (auditPayload.business_id) {
-          payload.business_id = auditPayload.business_id;
+        const targetBusinessId = await this.resolveBusinessUuid(auditPayload.business_id || auditPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
         }
 
         // Audit logs are APPEND-ONLY. Insert only.
