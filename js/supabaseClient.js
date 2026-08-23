@@ -55,14 +55,11 @@
       }
     }
 
-    // Helper to resolve string business IDs (e.g. 'BUS_LJS') to PostgreSQL UUID
+    // Helper to resolve string business IDs (e.g. 'BUS_LJS' or 'ayushi') to PostgreSQL UUID
     async resolveBusinessUuid(providedId) {
       if (providedId && typeof providedId === 'string' && providedId.length === 36 && providedId.includes('-')) {
         this.cachedBusinessUuid = providedId;
         return providedId;
-      }
-      if (this.cachedBusinessUuid && (!providedId || providedId === this.cachedBusinessUuid)) {
-        return this.cachedBusinessUuid;
       }
       if (!this.client) return null;
 
@@ -82,43 +79,38 @@
             this.cachedBusinessUuid = mems[0].business_id;
             return mems[0].business_id;
           }
+        }
 
-          // Auto-create isolated tenant workspace for this authenticated user
-          const ownerName = (user.user_metadata && user.user_metadata.full_name) || user.email.split('@')[0];
-          const uniqueSlug = 'store-' + user.id.slice(0, 8) + '-' + Date.now();
-          const { data: newBiz, error: createErr } = await this.client
-            .from('businesses')
-            .insert([{
-              name: `${ownerName}'s Shop`,
-              owner_name: ownerName,
-              username: user.email,
-              slug: uniqueSlug
-            }])
-            .select('id')
-            .single();
-
-          if (!createErr && newBiz) {
-            await this.client.from('business_members').insert([{
-              user_id: user.id,
-              business_id: newBiz.id,
-              role: 'OWNER',
-              is_active: true
-            }]);
-            this.cachedBusinessUuid = newBiz.id;
-            return newBiz.id;
+        // 2. Resolve by providedId, slug, username, or store name from local state
+        let targetSlug = providedId;
+        let busObj = null;
+        if (typeof window !== 'undefined' && window.iKhataStore) {
+          busObj = window.iKhataStore.getCurrentBusiness();
+          if (busObj) {
+            targetSlug = busObj.slug || busObj.username || busObj.id || providedId;
           }
         }
 
-        // 2. Demo / Guest Mode Fallback
-        if (providedId && typeof providedId === 'string' && !providedId.includes('-')) {
+        if (targetSlug) {
+          const clean = String(targetSlug).toLowerCase().trim();
           const { data: existingBiz } = await this.client
             .from('businesses')
             .select('id')
-            .or(`slug.eq.${providedId},username.eq.${providedId}`)
+            .or(`slug.ilike.${clean},username.ilike.${clean},name.ilike.${clean}`)
             .limit(1);
+
           if (existingBiz && existingBiz.length > 0) {
             this.cachedBusinessUuid = existingBiz[0].id;
             return existingBiz[0].id;
+          }
+        }
+
+        // 3. Fallback: If local business object exists, sync business to Supabase Cloud
+        if (busObj) {
+          const syncRes = await this.syncBusinessToCloud(busObj);
+          if (syncRes && syncRes.success && syncRes.business) {
+            this.cachedBusinessUuid = syncRes.business.id;
+            return syncRes.business.id;
           }
         }
       } catch (err) {
@@ -1341,6 +1333,126 @@
 
 
 
+    async purgeCloudDemoDataForBusiness(businessUuid) {
+      if (!this.client || !businessUuid) return { success: false };
+      try {
+        // Delete huge test/demo expenses (> 500,000) accidentally synced to this business
+        await this.client
+          .from('expenses')
+          .delete()
+          .eq('business_id', businessUuid)
+          .gt('amount', 500000);
+
+        // Delete sample demo customer names synced to this business
+        const sampleNames = [
+          'Rahul Traders', 'Sharma General Store', 'Amit Electronics', 'Gupta Provision',
+          'Verma Textiles', 'Krishna Gold Palace', 'Suresh Ornaments', 'Patel Kirana Depot',
+          'Bhagwati Sweet Shop', 'Laxmi Dairy Farm', 'Om Prakash Hardware', 'Meena Fashion House',
+          'Sunita Electronics', 'Rajesh Cloth House', 'Deepak Auto Parts', 'Mohini Silk Sarees',
+          'Vishal Super Mart', 'Priya Fashion Boutique', 'Anand Traders New', 'Hari Om Kirana',
+          'Vijay Sales Mathura', 'Bright Light Electricals', 'Rakesh Tech Services',
+          'Modern Electronics Hub', 'Deepa Home Appliances', 'Test Supabase Customer'
+        ];
+
+        for (const name of sampleNames) {
+          await this.client
+            .from('customers')
+            .delete()
+            .eq('business_id', businessUuid)
+            .ilike('name', name);
+        }
+
+        // Delete sample demo expenses for this business
+        const sampleExpenseNotes = [
+          'Shop Monthly Rent - Mathura Main Market',
+          'Staff Salary - Kamal Verma (October)',
+          'PVVNL Electricity Bill October',
+          'Goods delivery via tempo',
+          'Festival newspaper advertisement',
+          'AC servicing & cleaning',
+          'Festive gift boxes & carry bags',
+          'Helper staff wages September',
+          'Shop Rent September',
+          'Electricity September',
+          'Commercial Showroom Electricity',
+          'Showroom Rent - Connaught Place',
+          'Sales Staff 3 employees'
+        ];
+        for (const expNote of sampleExpenseNotes) {
+          await this.client
+            .from('expenses')
+            .delete()
+            .eq('business_id', businessUuid)
+            .ilike('note', `%${expNote}%`);
+        }
+
+        // Delete sample expenses matching fixed demo amounts
+        const sampleExpAmounts = [35000, 18000, 4800, 1200, 2500, 800, 1500, 12000, 3600, 12400, 65000, 45000];
+        for (const amt of sampleExpAmounts) {
+          await this.client
+            .from('expenses')
+            .delete()
+            .eq('business_id', businessUuid)
+            .eq('amount', amt);
+        }
+
+        // Delete sample invoices for this business
+        const sampleInvNotes = ['Payment via NEFT', 'Credit invoice - 15 day term', 'Overdue payment needed', 'Bulk dealer order'];
+        for (const invNote of sampleInvNotes) {
+          await this.client
+            .from('invoices')
+            .delete()
+            .eq('business_id', businessUuid)
+            .ilike('note', `%${invNote}%`);
+        }
+
+        // Delete sample POS bills for this business
+        for (const name of sampleNames) {
+          await this.client
+            .from('pos_bills')
+            .delete()
+            .eq('business_id', businessUuid)
+            .ilike('customer_name', name);
+        }
+
+        // Delete sample transactions for this business
+        for (const name of sampleNames) {
+          await this.client
+            .from('transactions')
+            .delete()
+            .eq('business_id', businessUuid)
+            .ilike('customer_name', name);
+        }
+
+        // Delete duplicate products in cloud for this business (keep 1 per SKU/Name)
+        const { data: cloudProds } = await this.client
+          .from('products')
+          .select('id, name, sku, created_at')
+          .eq('business_id', businessUuid)
+          .order('created_at', { ascending: true });
+
+        if (cloudProds && cloudProds.length > 0) {
+          const seenKeys = new Set();
+          const dupIds = [];
+          for (const p of cloudProds) {
+            const key = (p.sku && p.sku.trim()) ? ('sku:' + p.sku.toLowerCase().trim()) : ('name:' + String(p.name || '').toLowerCase().trim());
+            if (seenKeys.has(key)) {
+              dupIds.push(p.id);
+            } else {
+              seenKeys.add(key);
+            }
+          }
+          for (const dupId of dupIds) {
+            await this.client.from('products').delete().eq('id', dupId);
+          }
+        }
+        return { success: true };
+      } catch (err) {
+        console.warn('[purgeCloudDemoDataForBusiness] warning:', err.message);
+        return { success: false, error: err.message };
+      }
+    }
+
     // Batch Migration / Initial Sync: Push full local state to Supabase
     async pushFullLocalStateToCloud(state) {
       if (!this.client) return { success: false, error: 'Supabase offline' };
@@ -1360,10 +1472,19 @@
       let syncedSuppliers = 0;
       let syncedExpenses = 0;
 
+      const isStoreActiveRecord = (rec) => {
+        if (typeof window !== 'undefined' && window.iKhataStore) {
+          return window.iKhataStore.isRecordForActiveBusiness(rec);
+        }
+        return true;
+      };
+
       // 1. Customers
       if (Array.isArray(state.customers)) {
-        for (const cust of state.customers) {
+        const validCusts = state.customers.filter(isStoreActiveRecord);
+        for (const cust of validCusts) {
           const custPayload = { ...cust, business_id: bizUuid };
+          delete custPayload.businessId;
           const cloudUuid = customerCloudMap[cust.id];
           const res = await this.syncCustomerToCloud(custPayload, cloudUuid);
           if (res.success && res.customer) {
@@ -1376,8 +1497,10 @@
 
       // 2. Products
       if (Array.isArray(state.products)) {
-        for (const prod of state.products) {
+        const validProds = state.products.filter(isStoreActiveRecord);
+        for (const prod of validProds) {
           const prodPayload = { ...prod, business_id: bizUuid };
+          delete prodPayload.businessId;
           const cloudUuid = productCloudMap[prod.id];
           const res = await this.syncProductToCloud(prodPayload, cloudUuid);
           if (res.success && res.product) {
@@ -1390,8 +1513,10 @@
 
       // 3. Suppliers
       if (Array.isArray(state.suppliers)) {
-        for (const sup of state.suppliers) {
+        const validSups = state.suppliers.filter(isStoreActiveRecord);
+        for (const sup of validSups) {
           const supPayload = { ...sup, business_id: bizUuid };
+          delete supPayload.businessId;
           const cloudUuid = supplierCloudMap[sup.id];
           const res = await this.syncSupplierToCloud(supPayload, cloudUuid);
           if (res.success && res.supplier) {
@@ -1404,8 +1529,10 @@
 
       // 4. Transactions
       if (Array.isArray(state.transactions)) {
-        for (const tx of state.transactions) {
+        const validTxs = state.transactions.filter(isStoreActiveRecord);
+        for (const tx of validTxs) {
           const txPayload = { ...tx, business_id: bizUuid };
+          delete txPayload.businessId;
           const cloudUuid = transactionCloudMap[tx.id];
           const mappedCustUuid = customerCloudMap[tx.customerId] || null;
           const res = await this.syncTransactionToCloud(txPayload, cloudUuid, mappedCustUuid);
@@ -1419,10 +1546,33 @@
 
       // 5. Expenses
       if (Array.isArray(state.expenses)) {
-        for (const exp of state.expenses) {
+        const validExps = state.expenses.filter(isStoreActiveRecord);
+        for (const exp of validExps) {
+          if ((exp.amount || 0) > 500000) continue; // Skip huge test figures
           const expPayload = { ...exp, business_id: bizUuid };
+          delete expPayload.businessId;
           const res = await this.syncExpenseToCloud(expPayload);
           if (res.success) syncedExpenses++;
+        }
+      }
+
+      // 6. POS Bills
+      let syncedBills = 0;
+      if (Array.isArray(state.bills)) {
+        for (const bill of state.bills) {
+          const billPayload = { ...bill, business_id: bizUuid };
+          const res = await this.syncPosBillToCloud(billPayload);
+          if (res.success) syncedBills++;
+        }
+      }
+
+      // 7. Invoices
+      let syncedInvoices = 0;
+      if (Array.isArray(state.invoices)) {
+        for (const inv of state.invoices) {
+          const invPayload = { ...inv, business_id: bizUuid };
+          const res = await this.syncInvoiceToCloud(invPayload);
+          if (res.success) syncedInvoices++;
         }
       }
 
@@ -1439,7 +1589,9 @@
           products: syncedProducts,
           suppliers: syncedSuppliers,
           transactions: syncedTransactions,
-          expenses: syncedExpenses
+          expenses: syncedExpenses,
+          bills: syncedBills,
+          invoices: syncedInvoices
         }
       };
     }
@@ -1487,13 +1639,16 @@
       }
       try {
         const [
-          custRes, txRes, prodRes, supRes, expRes
+          custRes, txRes, prodRes, supRes, expRes, billsRes, invRes, purRes
         ] = await Promise.all([
           this.fetchCustomersFromCloud(businessId),
           this.fetchTransactionsFromCloud(businessId),
           this.fetchProductsFromCloud(businessId),
           this.fetchSuppliersFromCloud(businessId),
-          this.fetchExpensesFromCloud(businessId)
+          this.fetchExpensesFromCloud(businessId),
+          this.fetchPosBillsFromCloud(businessId),
+          this.fetchInvoicesFromCloud(businessId),
+          this.fetchPurchasesFromCloud(businessId)
         ]);
 
         return {
@@ -1503,7 +1658,10 @@
           transactions: txRes.transactions || [],
           products: prodRes.products || [],
           suppliers: supRes.suppliers || [],
-          expenses: expRes.expenses || []
+          expenses: expRes.expenses || [],
+          bills: billsRes.bills || [],
+          invoices: invRes.invoices || [],
+          purchases: purRes.purchases || []
         };
       } catch (err) {
         return { success: false, error: this.normalizeError(err) };

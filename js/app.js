@@ -1392,6 +1392,15 @@ window.iKhataUI = {
                   📤 Restore from JSON
                 </button>
               </div>
+
+              <div style="border: 1px solid var(--primary); background: rgba(99,102,241,0.05); padding: 16px; border-radius: 8px; text-align: center; grid-column: span 2;">
+                <div style="font-size: 2rem; margin-bottom: 8px;">☁️</div>
+                <strong style="font-size: 0.95rem; color: var(--primary);">Supabase Real-Time Cloud Sync</strong>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin: 4px 0 12px;">Sync all local records to Supabase PostgreSQL Database & pull updates from other laptops.</p>
+                <button class="btn btn-primary btn-sm" style="width: 100%; justify-content: center;" onclick="window.iKhataUI.syncToCloudUI()">
+                  ☁️ Sync All Data to Supabase Cloud Now
+                </button>
+              </div>
             </div>
 
             <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 16px;">
@@ -1445,6 +1454,22 @@ window.iKhataUI = {
     this.refresh();
   },
 
+  async syncToCloudUI() {
+    this.showToast('⏳ Syncing data with Supabase Cloud...', 'info');
+    try {
+      const res = await window.iKhataStore.syncAllDataToCloud();
+      if (res && res.success) {
+        const counts = (res.pushRes && res.pushRes.counts) || {};
+        this.showToast(`🎉 Cloud Sync Complete! (${counts.customers || 0} customers, ${counts.products || 0} products, ${counts.transactions || 0} transactions synced)`, 'success');
+        this.refresh();
+      } else {
+        this.showToast(`⚠️ Cloud Sync Note: ${res.reason || res.error || 'Check internet connection.'}`, 'warning');
+      }
+    } catch (err) {
+      this.showToast(`❌ Cloud sync error: ${err.message}`, 'danger');
+    }
+  },
+
   downloadBackupJSON() {
     const jsonStr = window.iKhataStore.exportBusinessBackup();
     const bus = window.iKhataStore.getCurrentBusiness();
@@ -1479,4 +1504,3 @@ window.iKhataUI = {
 document.addEventListener('DOMContentLoaded', () => {
   window.iKhataUI.init();
 });
-

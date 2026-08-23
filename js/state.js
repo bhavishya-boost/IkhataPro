@@ -8,39 +8,293 @@
       this.listeners = [];
       this.processedTxTokens = new Set(); // Idempotency guard for double-submit prevention
       this.state = this.loadState();
+      this.purgeSampleDemoData();
       this.initSecurityDefaults();
       this.initCloudSync();
     }
 
     initCloudSync() {
       if (typeof window !== 'undefined') {
-        const triggerSync = () => {
-          // Only push to cloud if user is authenticated (avoid overwriting cloud with empty state)
-          const session = this.state && this.state.currentSession;
-          if (!session || !session.isAuthenticated) return;
-          if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
-            window.iKhataSupabase.pushFullLocalStateToCloud(this.state)
-              .then(res => {
-                if (res && res.success) {
-                  console.log('⚡ [iKhataPro] Auto cloud sync completed:', res.counts);
-                  this.saveState();
-                }
-              })
-              .catch(err => console.warn('⚠️ [iKhataPro] Auto cloud sync warning:', err.message));
+        const triggerSync = async () => {
+          if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
+          const bizId = this.getActiveBusinessId();
+          try {
+            if (bizId && bizId !== 'BUS_LJS' && bizId !== 'BUS_SHARMA') {
+              const bizUuid = await window.iKhataSupabase.resolveBusinessUuid(bizId);
+              if (bizUuid) {
+                await window.iKhataSupabase.purgeCloudDemoDataForBusiness(bizUuid);
+              }
+            }
+            // First pull cloud data so any new data from other laptops is received immediately
+            const pullRes = await window.iKhataSupabase.pullAllCloudDataForBusiness(bizId);
+            if (pullRes && pullRes.success) {
+              this.mergeCloudDataIntoState(pullRes, bizId);
+              this.purgeSampleDemoData();
+            }
+            // Next push any local data to cloud
+            const pushRes = await window.iKhataSupabase.pushFullLocalStateToCloud(this.state);
+            if (pushRes && pushRes.success) {
+              console.log('⚡ [iKhataPro] Startup cloud sync completed:', pushRes.counts);
+            }
+            this.recalculateTotals();
+            this.saveState();
+            this.notify();
+          } catch (err) {
+            console.warn('⚠️ [iKhataPro] Startup cloud sync warning:', err.message);
           }
         };
 
-        if (document.readyState === 'complete') {
-          setTimeout(triggerSync, 1500);
-          // Start periodic cloud pull after initial load
-          setTimeout(() => this.startPeriodicCloudPull(), 3000);
-        } else {
-          window.addEventListener('load', () => {
-            setTimeout(triggerSync, 1500);
+        if (typeof document !== 'undefined' && typeof window.addEventListener === 'function') {
+          if (document.readyState === 'complete') {
+            setTimeout(triggerSync, 1000);
             setTimeout(() => this.startPeriodicCloudPull(), 3000);
-          });
+          } else {
+            window.addEventListener('load', () => {
+              setTimeout(triggerSync, 1000);
+              setTimeout(() => this.startPeriodicCloudPull(), 3000);
+            });
+          }
+        } else {
+          setTimeout(triggerSync, 50);
         }
       }
+    }
+
+    async syncAllDataToCloud() {
+      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
+        return { success: false, reason: 'Supabase client is offline.' };
+      }
+      const bizId = this.getActiveBusinessId();
+      try {
+        const pushRes = await window.iKhataSupabase.pushFullLocalStateToCloud(this.state);
+        if (!pushRes || !pushRes.success) {
+          return { success: false, reason: pushRes?.error?.message || pushRes?.error || 'Push to cloud failed.' };
+        }
+        const pullRes = await window.iKhataSupabase.pullAllCloudDataForBusiness(bizId);
+        if (pullRes && pullRes.success) {
+          this.mergeCloudDataIntoState(pullRes, bizId);
+          this.recalculateTotals();
+          this.saveState();
+          this.notify();
+        }
+        return { success: true, pushRes, pullRes, counts: pushRes.counts || {} };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    mergeCloudDataIntoState(cloud, bizId) {
+      if (!cloud || !cloud.success) return false;
+      let changed = false;
+
+      // Merge customers
+      if (cloud.customers && cloud.customers.length > 0) {
+        const localCustIds = new Set(this.state.customers.map(c => c.id));
+        cloud.customers.forEach(cc => {
+          if (!localCustIds.has(cc.id)) {
+            this.state.customers.push({
+              id: cc.id, name: cc.name, phone: cc.phone || '',
+              email: cc.email || '', city: cc.city || '', address: cc.address || '',
+              notes: cc.notes || '', balance: parseFloat(cc.balance) || 0,
+              category: cc.category || 'Regular', score: parseInt(cc.score) || 85,
+              isBadDebt: cc.is_bad_debt || false, businessId: bizId, business_id: bizId,
+              lastActive: cc.last_active || null, isDeleted: cc.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      // Merge transactions
+      if (cloud.transactions && cloud.transactions.length > 0) {
+        const localTxIds = new Set(this.state.transactions.map(t => t.id));
+        cloud.transactions.forEach(ct => {
+          if (!localTxIds.has(ct.id) && !localTxIds.has(ct.idempotency_key)) {
+            this.state.transactions.push({
+              id: ct.id, customerId: ct.customer_id || '',
+              customerName: ct.customer_name || 'Customer',
+              type: ct.type === 'GAVE' ? 'UDHAR' : 'JAMA',
+              amount: parseFloat(ct.amount) || 0, date: ct.date || '',
+              time: ct.time_str || '', mode: ct.mode || 'Cash',
+              note: ct.note || '', businessId: bizId, business_id: bizId,
+              isDeleted: ct.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      // Merge products
+      if (cloud.products && cloud.products.length > 0) {
+        const localProdIds = new Set(this.state.products.map(p => p.id));
+        cloud.products.forEach(cp => {
+          if (!localProdIds.has(cp.id)) {
+            this.state.products.push({
+              id: cp.id, name: cp.name, description: cp.description || '',
+              category: cp.category || 'General', sku: cp.sku || '',
+              price: parseFloat(cp.price) || 0, cost: parseFloat(cp.cost) || 0,
+              stock: parseInt(cp.stock) || 0, minStock: parseInt(cp.min_stock) || 5,
+              unit: cp.unit || 'Pcs', gstRate: parseFloat(cp.gst_rate) || 18,
+              businessId: bizId, business_id: bizId, isDeleted: cp.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      // Merge suppliers
+      if (cloud.suppliers && cloud.suppliers.length > 0) {
+        const localSupIds = new Set(this.state.suppliers.map(s => s.id));
+        cloud.suppliers.forEach(cs => {
+          if (!localSupIds.has(cs.id)) {
+            this.state.suppliers.push({
+              id: cs.id, name: cs.name, businessName: cs.business_name || '',
+              phone: cs.phone || '', email: cs.email || '', address: cs.address || '',
+              category: cs.category || 'General Supplier',
+              balance: parseFloat(cs.balance) || 0,
+              businessId: bizId, business_id: bizId, active: cs.is_active !== false,
+              isDeleted: cs.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      // Merge expenses
+      if (cloud.expenses && cloud.expenses.length > 0) {
+        const localExpIds = new Set(this.state.expenses.map(e => e.id));
+        cloud.expenses.forEach(ce => {
+          if (!localExpIds.has(ce.id)) {
+            this.state.expenses.push({
+              id: ce.id, category: ce.category || 'Other',
+              amount: parseFloat(ce.amount) || 0, date: ce.date || '',
+              note: ce.note || '', businessId: bizId, business_id: bizId,
+              isDeleted: ce.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      if (changed) {
+        this.purgeSampleDemoData();
+      }
+      return changed;
+    }
+
+    purgeSampleDemoData() {
+      if (!this.state) return;
+      const sampleNames = new Set([
+        'abc wholesale distributors', 'shree ram silver mart', 'agro traders wholesale',
+        'microtek power systems', 'lg india electronics dist', 'delhi bullion suppliers',
+        'royal jewels wholesalers', 'sunita electronics', 'rahul traders', 'krishna gold palace',
+        'bhagwati sweet shop', 'laxmi dairy farm', 'verma textiles', 'deepak auto parts',
+        'mohini silk sarees', 'modern electronics hub', 'suresh ornaments', 'gupta provision',
+        'sharma general store', 'anand traders new', 'vishal super mart', 'priya fashion boutique',
+        'rakesh tech services', 'rajesh cloth house', 'meena fashion house', 'amit electronics',
+        'patel kirana depot', 'bright light electricals', 'om prakash hardware', 'deepa home appliances',
+        'hari om kirana', 'vijay sales mathura',
+        'gold coin 24k 5g', 'silver payal 100g', 'silver chain 50g', 'gold ring 22k 3g',
+        'diamond pendant set', 'wheat flour atta 10kg', 'basmati rice premium 5kg',
+        'mustard oil 1l', 'toor dal 1kg', 'ghee pure cow 500g', 'sugar 5kg',
+        'nariyal pani (coconut water)', 'lg smart led tv 43 inch', 'pulses mix pack (assorted)',
+        'gold bangle set 18k', 'silver glass set (6pc)', 'microtek inverter 1050va',
+        'lg refrigerator 260l', 'ceiling fan havells 1200mm', 'tubelight led 20w',
+        'washing machine lg 7kg', 'man', 'raju', 'kamal', 'test supabase customer'
+      ]);
+
+      const sampleExpenseNotes = [
+        'shop monthly rent', 'staff salary - kamal verma', 'pvvnl electricity bill',
+        'goods delivery via tempo', 'festival newspaper advertisement', 'ac servicing & cleaning',
+        'festive gift boxes', 'helper staff wages september', 'shop rent september',
+        'electricity september', 'commercial showroom electricity', 'showroom rent', 'sales staff 3 employees'
+      ];
+      const sampleExpAmounts = new Set([35000, 18000, 4800, 1200, 2500, 800, 1500, 12000, 3600, 12400, 65000, 45000]);
+
+      const activeBId = this.getActiveBusinessId();
+      const isDemoStore = !activeBId || activeBId === 'BUS_LJS' || activeBId === 'BUS_SHARMA';
+
+      const isSample = (name, id, sku, phone, recordBId, note = '', amount = 0) => {
+        if (!isDemoStore) {
+          if (recordBId === 'BUS_LJS' || recordBId === 'BUS_SHARMA') return true;
+          if (sku && typeof sku === 'string' && (/^SKU-(GLD|SLV|DIA|ATT|RIC|OIL|DAL|GHE|SUG|COC|TV|BAN|INV|REF|FAN|LED|WM|PUL)-\d+/i).test(sku)) return true;
+          if (id && typeof id === 'string' && (/^(s\d+|cs\d+|c\d+|p\d+|ps\d+|e\d+|e_|st_\d+|PO-\d+|BILL-\d+|BILL-S\d+|INV-\d+|INV-1\d+|INV-2\d+|t\d+|ts\d+|aud_\d+)$/i).test(id)) return true;
+          if (phone && (phone === '+91 90000 00000' || phone === '899822892')) return true;
+
+          if (note && typeof note === 'string') {
+            const lowerNote = note.toLowerCase();
+            if (sampleExpenseNotes.some(sn => lowerNote.includes(sn))) return true;
+          }
+          if (amount && sampleExpAmounts.has(amount)) return true;
+
+          if (name) {
+            const lower = String(name).toLowerCase().trim();
+            if (sampleNames.has(lower) || lower.includes('test supabase customer')) return true;
+          }
+        }
+        return false;
+      };
+
+      if (Array.isArray(this.state.suppliers)) {
+        this.state.suppliers = this.state.suppliers.filter(s => !isSample(s.name, s.id, s.sku, s.phone, s.business_id || s.businessId));
+      }
+      if (Array.isArray(this.state.customers)) {
+        this.state.customers = this.state.customers.filter(c => !isSample(c.name, c.id, null, c.phone, c.business_id || c.businessId));
+
+        // Deduplicate customers by phone/name for active business
+        const seenCustKeys = new Set();
+        const dedupedCusts = [];
+        for (const c of this.state.customers) {
+          const key = (c.phone ? c.phone.trim() : '') || String(c.name || '').toLowerCase().trim();
+          if (key && !seenCustKeys.has(key)) {
+            seenCustKeys.add(key);
+            dedupedCusts.push(c);
+          } else if (!key) {
+            dedupedCusts.push(c);
+          }
+        }
+        this.state.customers = dedupedCusts;
+      }
+      if (Array.isArray(this.state.products)) {
+        this.state.products = this.state.products.filter(p => !isSample(p.name, p.id, p.sku, null, p.business_id || p.businessId));
+
+        // Deduplicate products by SKU or Name
+        const seenProdKeys = new Set();
+        const dedupedProducts = [];
+        for (const p of this.state.products) {
+          const key = (p.sku && p.sku.trim()) ? ('sku:' + p.sku.toLowerCase().trim()) : ('name:' + String(p.name || '').toLowerCase().trim());
+          if (key && !seenProdKeys.has(key)) {
+            seenProdKeys.add(key);
+            dedupedProducts.push(p);
+          } else if (!key) {
+            dedupedProducts.push(p);
+          }
+        }
+        this.state.products = dedupedProducts;
+      }
+      if (Array.isArray(this.state.transactions)) {
+        this.state.transactions = this.state.transactions.filter(t => {
+          if (isSample(t.customerName, t.id, null, null, t.business_id || t.businessId, t.note, t.amount)) return false;
+          if (t.customerId && typeof t.customerId === 'string' && (/^(c\d+|cs\d+)$/).test(t.customerId)) return false;
+          return true;
+        });
+      }
+      if (Array.isArray(this.state.expenses)) {
+        this.state.expenses = this.state.expenses.filter(e => {
+          if (isSample(e.category, e.id, null, null, e.business_id || e.businessId, e.note, e.amount)) return false;
+          if ((e.amount || 0) > 500000 && !isDemoStore) return false;
+          return true;
+        });
+      }
+      if (Array.isArray(this.state.posBills)) {
+        this.state.posBills = this.state.posBills.filter(b => !isSample(b.customerName, b.id, null, null, b.business_id || b.businessId));
+      }
+      if (Array.isArray(this.state.invoices)) {
+        this.state.invoices = this.state.invoices.filter(i => !isSample(i.customerName, i.id, null, null, i.business_id || i.businessId, i.note));
+      }
+
+      this.recalculateTotals();
+      this.saveState();
     }
 
     // ── PERIODIC CLOUD PULL: Every 30s, fetch fresh data from Supabase ──
@@ -48,106 +302,15 @@
     startPeriodicCloudPull() {
       if (typeof window === 'undefined') return;
       this._cloudPullInterval = setInterval(() => {
-        const session = this.state && this.state.currentSession;
-        if (!session || !session.isAuthenticated || !session.businessId) return;
-        if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
+        const bizId = this.getActiveBusinessId();
+        if (!bizId || !window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
 
-        window.iKhataSupabase.pullAllCloudDataForBusiness(session.businessId)
+        window.iKhataSupabase.pullAllCloudDataForBusiness(bizId)
           .then(cloud => {
             if (!cloud || !cloud.success) return;
-            const bizId = session.businessId;
-            let changed = false;
-
-            // Merge new customers
-            if (cloud.customers && cloud.customers.length > 0) {
-              const localIds = new Set(this.state.customers.map(c => c.id));
-              cloud.customers.forEach(cc => {
-                if (!localIds.has(cc.id)) {
-                  this.state.customers.push({
-                    id: cc.id, name: cc.name, phone: cc.phone || '',
-                    email: cc.email || '', city: cc.city || '', address: cc.address || '',
-                    notes: cc.notes || '', balance: parseFloat(cc.balance) || 0,
-                    category: cc.category || 'Regular', score: parseInt(cc.score) || 85,
-                    isBadDebt: cc.is_bad_debt || false, businessId: bizId,
-                    lastActive: cc.last_active || null, isDeleted: cc.is_deleted || false
-                  });
-                  changed = true;
-                }
-              });
-            }
-
-            // Merge new transactions
-            if (cloud.transactions && cloud.transactions.length > 0) {
-              const localIds = new Set(this.state.transactions.map(t => t.id));
-              cloud.transactions.forEach(ct => {
-                if (!localIds.has(ct.id) && !localIds.has(ct.idempotency_key)) {
-                  this.state.transactions.push({
-                    id: ct.id, customerId: ct.customer_id || '',
-                    customerName: ct.customer_name || 'Customer',
-                    type: ct.type === 'GAVE' ? 'UDHAR' : 'JAMA',
-                    amount: parseFloat(ct.amount) || 0, date: ct.date || '',
-                    time: ct.time_str || '', mode: ct.mode || 'Cash',
-                    note: ct.note || '', businessId: bizId,
-                    isDeleted: ct.is_deleted || false
-                  });
-                  changed = true;
-                }
-              });
-            }
-
-            // Merge new products
-            if (cloud.products && cloud.products.length > 0) {
-              const localIds = new Set(this.state.products.map(p => p.id));
-              cloud.products.forEach(cp => {
-                if (!localIds.has(cp.id)) {
-                  this.state.products.push({
-                    id: cp.id, name: cp.name, description: cp.description || '',
-                    category: cp.category || 'General', sku: cp.sku || '',
-                    price: parseFloat(cp.price) || 0, cost: parseFloat(cp.cost) || 0,
-                    stock: parseInt(cp.stock) || 0, minStock: parseInt(cp.min_stock) || 5,
-                    unit: cp.unit || 'Pcs', gstRate: parseFloat(cp.gst_rate) || 18,
-                    businessId: bizId, isDeleted: cp.is_deleted || false
-                  });
-                  changed = true;
-                }
-              });
-            }
-
-            // Merge new suppliers
-            if (cloud.suppliers && cloud.suppliers.length > 0) {
-              const localIds = new Set(this.state.suppliers.map(s => s.id));
-              cloud.suppliers.forEach(cs => {
-                if (!localIds.has(cs.id)) {
-                  this.state.suppliers.push({
-                    id: cs.id, name: cs.name, businessName: cs.business_name || '',
-                    phone: cs.phone || '', email: cs.email || '', address: cs.address || '',
-                    category: cs.category || 'General Supplier',
-                    balance: parseFloat(cs.balance) || 0,
-                    businessId: bizId, active: cs.is_active !== false,
-                    isDeleted: cs.is_deleted || false
-                  });
-                  changed = true;
-                }
-              });
-            }
-
-            // Merge new expenses
-            if (cloud.expenses && cloud.expenses.length > 0) {
-              const localIds = new Set(this.state.expenses.map(e => e.id));
-              cloud.expenses.forEach(ce => {
-                if (!localIds.has(ce.id)) {
-                  this.state.expenses.push({
-                    id: ce.id, category: ce.category || 'Other',
-                    amount: parseFloat(ce.amount) || 0, date: ce.date || '',
-                    note: ce.note || '', businessId: bizId,
-                    isDeleted: ce.is_deleted || false
-                  });
-                  changed = true;
-                }
-              });
-            }
-
+            const changed = this.mergeCloudDataIntoState(cloud, bizId);
             if (changed) {
+              this.purgeSampleDemoData();
               this.recalculateTotals();
               this.saveState();
               this.notify(); // Refresh UI
@@ -169,7 +332,28 @@
         console.error('Failed to load state from localStorage', e);
       }
       if (!state) {
-        state = window.iKhataDemo.getInitialState();
+        const isDemoHash = typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('demo');
+        const isNodeEnv = (typeof process !== 'undefined' && process.versions && process.versions.node);
+        const demoObj = (typeof window !== 'undefined' ? window.iKhataDemo : global.iKhataDemo);
+        if ((isDemoHash || isNodeEnv) && demoObj && typeof demoObj.getInitialState === 'function') {
+          state = demoObj.getInitialState();
+        } else {
+          state = {
+            businesses: [],
+            currentSession: { isAuthenticated: false, user: null, businessId: null, workspaceSlug: null },
+            customers: [],
+            products: [],
+            suppliers: [],
+            transactions: [],
+            expenses: [],
+            posBills: [],
+            invoices: [],
+            purchases: [],
+            employees: [],
+            auditLogs: [],
+            notifications: []
+          };
+        }
       }
       if (state && Array.isArray(state.employees)) {
         state.employees = state.employees.filter(e => e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
@@ -309,20 +493,27 @@
 
     // Helper to verify business membership
     isRecordForActiveBusiness(record) {
+      if (!record) return false;
       const session = this.state.currentSession;
-      const isSupabaseAuth = session && session.authSource === 'SUPABASE';
       const bId = this.getActiveBusinessId();
-      const cachedUuid = window.iKhataSupabase ? window.iKhataSupabase.cachedBusinessUuid : null;
       const recBId = record.business_id || record.businessId;
 
-      if (isSupabaseAuth) {
-        // Authenticated personal user: STRICT isolation, match only their specific business UUID
+      const isDemoStore = bId === 'BUS_LJS' || bId === 'BUS_SHARMA';
+      if (!isDemoStore) {
+        if (recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
+        if (record.id && typeof record.id === 'string' && (/^(s\d+|cs\d+|c\d+|p\d+|ps\d+|e\d+|st_\d+|PO-\d+|BILL-\d+|BILL-S\d+|INV-\d+|t\d+|ts\d+|aud_\d+)$/).test(record.id)) {
+          return false;
+        }
+      }
+
+      const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
+
+      if (session && session.isAuthenticated) {
         if (!recBId) return false;
         return recBId === bId || (cachedUuid && recBId === cachedUuid);
       }
 
-      // Guest / Demo Mode
-      if (!recBId) return bId === 'BUS_LJS';
+      if (!recBId) return isDemoStore;
       return recBId === bId || (cachedUuid && recBId === cachedUuid);
     }
 
@@ -334,7 +525,20 @@
 
     getProducts(includeDeleted = false) {
       if (!this.state.products) this.state.products = [];
-      return this.state.products.filter(p => this.isRecordForActiveBusiness(p) && (includeDeleted || !p.isDeleted));
+      const prods = this.state.products.filter(p => this.isRecordForActiveBusiness(p) && (includeDeleted || !p.isDeleted));
+
+      const seen = new Set();
+      const deduped = [];
+      for (const p of prods) {
+        const key = (p.sku && p.sku.trim()) ? ('sku:' + p.sku.toLowerCase().trim()) : ('name:' + String(p.name || '').toLowerCase().trim());
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          deduped.push(p);
+        } else if (!key) {
+          deduped.push(p);
+        }
+      }
+      return deduped;
     }
 
     getTransactions(includeDeleted = false) {
