@@ -390,3 +390,30 @@
   transform: translateX(4px);
 }
 
+/* Mandatory Fields & Validation Error Styles */
+.required-asterisk, .required-star {
+  color: #ef4444 !important;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.input-error, .form-input.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+}
+
+.inline-error-alert {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+

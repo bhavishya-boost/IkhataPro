@@ -56,31 +56,184 @@ window.iKhataOnboarding = {
     return score; // 0-3
   },
 
-  nextStep() {
-    // Validation per step
+  validateCurrentStep() {
+    let isValid = true;
+    let errorMessage = '';
+
+    const inputs = document.querySelectorAll('#onboarding-view-container .form-input');
+    inputs.forEach(input => {
+      input.classList.remove('input-error');
+      input.style.borderColor = '';
+      input.style.boxShadow = '';
+    });
+
+    const hideInlineError = () => {
+      const errEl = document.getElementById('onboarding-error-alert');
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    };
+    const showInlineError = (msg) => {
+      const errEl = document.getElementById('onboarding-error-alert');
+      if (errEl) { errEl.textContent = '⚠️ ' + msg; errEl.style.display = 'flex'; }
+    };
+
+    hideInlineError();
+
     if (this.currentStep === 1) {
-      if (!this.formData.shopName.trim()) {
-        window.iKhataUI.showToast('Please enter your business / shop name', 'danger');
-        return;
+      const shopNameVal = this.formData.shopName ? this.formData.shopName.trim() : '';
+      if (!shopNameVal) {
+        isValid = false;
+        errorMessage = 'Please fill in all required fields marked with *';
+        const el = document.getElementById('onboarding-shop-name');
+        if (el) {
+          el.classList.add('input-error');
+          el.style.borderColor = '#ef4444';
+          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+          el.focus();
+        }
       }
     } else if (this.currentStep === 2) {
-      if (!this.formData.fullName.trim()) {
-        window.iKhataUI.showToast('Please enter your full name', 'danger');
-        return;
+      const nameVal = this.formData.fullName ? this.formData.fullName.trim() : '';
+      const mobileVal = this.formData.mobile ? this.formData.mobile.trim() : '';
+
+      if (!nameVal || !mobileVal) {
+        isValid = false;
+        errorMessage = 'Please fill in all required fields marked with *';
+        if (!nameVal) {
+          const el = document.getElementById('onboarding-full-name');
+          if (el) {
+            el.classList.add('input-error');
+            el.style.borderColor = '#ef4444';
+            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+            el.focus();
+          }
+        }
+        if (!mobileVal) {
+          const el = document.getElementById('onboarding-mobile');
+          if (el) {
+            el.classList.add('input-error');
+            el.style.borderColor = '#ef4444';
+            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+            if (nameVal) el.focus();
+          }
+        }
+      } else if (!/^\d{10}$/.test(mobileVal)) {
+        isValid = false;
+        errorMessage = 'Please enter a valid 10-digit mobile number.';
+        const el = document.getElementById('onboarding-mobile');
+        if (el) {
+          el.classList.add('input-error');
+          el.style.borderColor = '#ef4444';
+          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+          el.focus();
+        }
       }
     } else if (this.currentStep === 3) {
-      if (!this.formData.username.trim() || !this.formData.password) {
-        window.iKhataUI.showToast('Please enter username and password', 'danger');
-        return;
+      const usernameVal = this.formData.username ? this.formData.username.trim() : '';
+      const passwordVal = this.formData.password ? this.formData.password : '';
+      const confirmVal = this.formData.confirmPassword ? this.formData.confirmPassword : '';
+
+      if (!usernameVal || !passwordVal) {
+        isValid = false;
+        errorMessage = 'Please fill in all required fields marked with *';
+        if (!usernameVal) {
+          const el = document.getElementById('onboarding-username');
+          if (el) {
+            el.classList.add('input-error');
+            el.style.borderColor = '#ef4444';
+            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+            el.focus();
+          }
+        }
+        if (!passwordVal) {
+          const el = document.getElementById('onboarding-password-field');
+          if (el) {
+            el.classList.add('input-error');
+            el.style.borderColor = '#ef4444';
+            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+            if (usernameVal) el.focus();
+          }
+        }
+      } else if (passwordVal.length < 4) {
+        isValid = false;
+        errorMessage = 'Password must be at least 4 characters long';
+        const el = document.getElementById('onboarding-password-field');
+        if (el) {
+          el.classList.add('input-error');
+          el.style.borderColor = '#ef4444';
+          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+          el.focus();
+        }
+      } else if (confirmVal && passwordVal !== confirmVal) {
+        isValid = false;
+        errorMessage = 'Passwords do not match!';
+        const el = document.getElementById('onboarding-confirm-password');
+        if (el) {
+          el.classList.add('input-error');
+          el.style.borderColor = '#ef4444';
+          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+          el.focus();
+        }
       }
-      if (this.formData.password.length < 4) {
-        window.iKhataUI.showToast('Password must be at least 4 characters long', 'warning');
-        return;
+    } else if (this.currentStep === 4) {
+      const addressVal = this.formData.shopAddress ? this.formData.shopAddress.trim() : '';
+      if (!addressVal) {
+        isValid = false;
+        errorMessage = 'Please fill in all required fields marked with *';
+        const el = document.getElementById('onboarding-shop-address');
+        if (el) {
+          el.classList.add('input-error');
+          el.style.borderColor = '#ef4444';
+          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
+          el.focus();
+        }
       }
-      if (this.formData.confirmPassword && this.formData.password !== this.formData.confirmPassword) {
-        window.iKhataUI.showToast('Passwords do not match!', 'danger');
-        return;
+    }
+
+    if (!isValid) {
+      showInlineError(errorMessage);
+      if (window.iKhataUI && window.iKhataUI.showToast) {
+        window.iKhataUI.showToast(errorMessage, 'danger');
       }
+    }
+
+    return isValid;
+  },
+
+  validateAllMandatoryFields() {
+    if (!this.formData.shopName || !this.formData.shopName.trim()) {
+      this.currentStep = 1;
+      this.render();
+      this.validateCurrentStep();
+      return false;
+    }
+    const nameVal = this.formData.fullName ? this.formData.fullName.trim() : '';
+    const mobileVal = this.formData.mobile ? this.formData.mobile.trim() : '';
+    if (!nameVal || !mobileVal || !/^\d{10}$/.test(mobileVal)) {
+      this.currentStep = 2;
+      this.render();
+      this.validateCurrentStep();
+      return false;
+    }
+    const usernameVal = this.formData.username ? this.formData.username.trim() : '';
+    const passwordVal = this.formData.password ? this.formData.password : '';
+    if (!usernameVal || !passwordVal || passwordVal.length < 4) {
+      this.currentStep = 3;
+      this.render();
+      this.validateCurrentStep();
+      return false;
+    }
+    if (!this.formData.shopAddress || !this.formData.shopAddress.trim()) {
+      this.currentStep = 4;
+      this.render();
+      this.validateCurrentStep();
+      return false;
+    }
+    return true;
+  },
+
+  nextStep() {
+    if (!this.validateCurrentStep()) {
+      return;
     }
 
     if (this.currentStep < 5) {
@@ -99,6 +252,10 @@ window.iKhataOnboarding = {
   },
 
   submitRegistration() {
+    if (!this.validateAllMandatoryFields()) {
+      return;
+    }
+
     this.isSubmitting = true;
     const container = document.getElementById('onboarding-card-body');
     if (!container) return;
@@ -128,7 +285,7 @@ window.iKhataOnboarding = {
       const el = document.getElementById('check-5');
       if (el) { el.className = 'checklist-item done'; el.querySelector('.check-icon').innerText = '✓'; }
 
-      // Register business in state
+      // Register business in state (persists to localStorage)
       const newBus = window.iKhataStore.registerNewBusiness(this.formData);
 
       // Render Final Success Screen
@@ -181,11 +338,13 @@ window.iKhataOnboarding = {
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Tell us about your shop</h2>
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Enter your business name and select your store category</p>
 
+        <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
+
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Business / Shop Name</label>
+          <label class="form-label" style="font-weight: 700;">Business / Shop Name <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">🏪</span>
-            <input type="text" class="form-input" style="font-size: 1.05rem;" placeholder="e.g. Laxmi Super Store or Gupta Kirana" value="${this.formData.shopName}" oninput="window.iKhataOnboarding.updateField('shopName', this.value);" autofocus required>
+            <input type="text" id="onboarding-shop-name" class="form-input" style="font-size: 1.05rem;" placeholder="e.g. Laxmi Super Store or Gupta Kirana" value="${this.formData.shopName}" oninput="window.iKhataOnboarding.updateField('shopName', this.value);" autofocus required>
           </div>
         </div>
 
@@ -217,19 +376,21 @@ window.iKhataOnboarding = {
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Who is running this shop?</h2>
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Enter owner contact details</p>
 
+        <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
+
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Owner Full Name</label>
+          <label class="form-label" style="font-weight: 700;">Owner Full Name <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">👤</span>
-            <input type="text" class="form-input" placeholder="e.g. Rajesh Kumar" value="${this.formData.fullName}" oninput="window.iKhataOnboarding.updateField('fullName', this.value);" autofocus required>
+            <input type="text" id="onboarding-full-name" class="form-input" placeholder="e.g. Rajesh Kumar" value="${this.formData.fullName}" oninput="window.iKhataOnboarding.updateField('fullName', this.value);" autofocus required>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Mobile Number (for WhatsApp Reminders)</label>
+          <label class="form-label" style="font-weight: 700;">Phone Number <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">📱</span>
-            <input type="tel" class="form-input" placeholder="9876543210" value="${this.formData.mobile}" oninput="window.iKhataOnboarding.updateField('mobile', this.value);">
+            <input type="tel" id="onboarding-mobile" class="form-input" placeholder="9876543210 (10 digits)" maxlength="10" value="${this.formData.mobile}" oninput="window.iKhataOnboarding.updateField('mobile', this.value.replace(/\\D/g, ''));" required>
           </div>
         </div>
 
@@ -237,7 +398,7 @@ window.iKhataOnboarding = {
           <label class="form-label" style="font-weight: 700;">Email Address (Optional)</label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">✉️</span>
-            <input type="email" class="form-input" placeholder="rajesh@example.com" value="${this.formData.email}" oninput="window.iKhataOnboarding.updateField('email', this.value);">
+            <input type="email" id="onboarding-email" class="form-input" placeholder="rajesh@example.com" value="${this.formData.email}" oninput="window.iKhataOnboarding.updateField('email', this.value);">
           </div>
         </div>
       `;
@@ -252,16 +413,18 @@ window.iKhataOnboarding = {
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Set up login credentials</h2>
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Choose a username and password to log in later</p>
 
+        <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
+
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Username</label>
+          <label class="form-label" style="font-weight: 700;">Username / User ID <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">🔑</span>
-            <input type="text" class="form-input" placeholder="e.g. rajesh123" value="${this.formData.username}" oninput="window.iKhataOnboarding.updateField('username', this.value);" required>
+            <input type="text" id="onboarding-username" class="form-input" placeholder="e.g. rajesh123" value="${this.formData.username}" oninput="window.iKhataOnboarding.updateField('username', this.value);" required>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Password</label>
+          <label class="form-label" style="font-weight: 700;">Password <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">🔒</span>
             <input type="password" id="onboarding-password-field" class="form-input" placeholder="••••••••" value="${this.formData.password}" oninput="window.iKhataOnboarding.updatePasswordStrength(this.value);" required>
@@ -273,10 +436,10 @@ window.iKhataOnboarding = {
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Confirm Password</label>
+          <label class="form-label" style="font-weight: 700;">Confirm Password <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">🔒</span>
-            <input type="password" class="form-input" placeholder="••••••••" value="${this.formData.confirmPassword}" oninput="window.iKhataOnboarding.updateField('confirmPassword', this.value);" required>
+            <input type="password" id="onboarding-confirm-password" class="form-input" placeholder="••••••••" value="${this.formData.confirmPassword}" oninput="window.iKhataOnboarding.updateField('confirmPassword', this.value);" required>
           </div>
         </div>
       `;
@@ -286,28 +449,30 @@ window.iKhataOnboarding = {
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Where is your store located?</h2>
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Address & GST details for invoice printing</p>
 
+        <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
+
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Shop Address</label>
+          <label class="form-label" style="font-weight: 700;">Shop Address <span class="required-asterisk" style="color: red;">*</span></label>
           <div class="input-with-icon">
             <span class="input-icon-prefix">📍</span>
-            <input type="text" class="form-input" placeholder="102 Main Market Road" value="${this.formData.shopAddress}" oninput="window.iKhataOnboarding.updateField('shopAddress', this.value);">
+            <input type="text" id="onboarding-shop-address" class="form-input" placeholder="102 Main Market Road" value="${this.formData.shopAddress}" oninput="window.iKhataOnboarding.updateField('shopAddress', this.value);" required>
           </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label class="form-label" style="font-weight: 700;">City</label>
-            <input type="text" class="form-input" value="${this.formData.city}" oninput="window.iKhataOnboarding.updateField('city', this.value);">
+            <input type="text" id="onboarding-city" class="form-input" value="${this.formData.city}" oninput="window.iKhataOnboarding.updateField('city', this.value);">
           </div>
           <div class="form-group">
             <label class="form-label" style="font-weight: 700;">PIN Code</label>
-            <input type="text" class="form-input" placeholder="281001" value="${this.formData.pincode}" oninput="window.iKhataOnboarding.updateField('pincode', this.value);">
+            <input type="text" id="onboarding-pincode" class="form-input" placeholder="281001" value="${this.formData.pincode}" oninput="window.iKhataOnboarding.updateField('pincode', this.value);">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">GSTIN (Optional for GST Bills)</label>
-          <input type="text" class="form-input" placeholder="09AAAAA0000A1Z5" value="${this.formData.gstin}" oninput="window.iKhataOnboarding.updateField('gstin', this.value);">
+          <label class="form-label" style="font-weight: 700;">GSTIN Number (Optional)</label>
+          <input type="text" id="onboarding-gstin" class="form-input" placeholder="09AAAAA0000A1Z5" value="${this.formData.gstin}" oninput="window.iKhataOnboarding.updateField('gstin', this.value);">
         </div>
       `;
     } else if (this.currentStep === 5) {
@@ -315,6 +480,8 @@ window.iKhataOnboarding = {
         <div class="step-indicator">STEP 5 OF 5 • FINAL PREFERENCES</div>
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Almost there!</h2>
         <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Enable core modules for ${this.formData.shopName || 'your shop'}</p>
+
+        <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
 
         <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px;">
           <label style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 14px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-color); cursor: pointer;">
@@ -335,6 +502,7 @@ window.iKhataOnboarding = {
         </div>
       `;
     }
+
 
     container.innerHTML = `
       <div class="onboarding-container">

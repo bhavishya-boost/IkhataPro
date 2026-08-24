@@ -311,17 +311,118 @@ async function saveCustomer() {
   }
 }
 
-// ── Add Transaction Modal ───────────────────────────────────────
-function openAddTransactionModal(type) {
-  if (!state.currentCustomerId && !type) {
-    showToast('Please open a customer ledger first.', 'info');
+// ── Quick Add Customer Modal & Dropdown Handlers ─────────────────
+function populateCustomerDropdown(selectedId = '') {
+  const selectEl = document.getElementById('txn-customer-select');
+  if (!selectEl) return;
+  selectEl.innerHTML = `<option value="">-- Choose Customer --</option>` +
+    (state.customers || []).map(c => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name} (${c.phone || ''})</option>`).join('') +
+    `<option value="__ADD_NEW__" class="add-new-option">➕ + Add New Customer...</option>`;
+  selectEl.value = selectedId || state.currentCustomerId || '';
+}
+
+function handleCustomerSelectChange(selectEl) {
+  if (selectEl.value === '__ADD_NEW__') {
+    selectEl.value = selectEl.dataset.previousValue || '';
+    openQuickAddCustomerModal();
+  } else {
+    selectEl.dataset.previousValue = selectEl.value;
+    if (selectEl.value) {
+      state.currentCustomerId = selectEl.value;
+    }
+  }
+}
+
+function openQuickAddCustomerModal() {
+  clearFields(['quick-cust-name', 'quick-cust-phone']);
+  const errEl = document.getElementById('quick-cust-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  openModal('quick-customer-modal-overlay');
+  setTimeout(() => focusEl('quick-cust-name'), 120);
+}
+
+function closeQuickAddCustomerModal() {
+  closeModal('quick-customer-modal-overlay');
+}
+
+async function submitQuickAddCustomer(form) {
+  const errEl = document.getElementById('quick-cust-error');
+  const name = val('quick-cust-name').trim();
+  const phone = val('quick-cust-phone').trim();
+
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  if (!name && !phone) {
+    if (errEl) { errEl.textContent = '⚠️ Customer Name and Phone Number are both required.'; errEl.style.display = 'block'; }
+    focusEl('quick-cust-name');
     return;
   }
+  if (!name) {
+    if (errEl) { errEl.textContent = '⚠️ Customer Name is required.'; errEl.style.display = 'block'; }
+    focusEl('quick-cust-name');
+    return;
+  }
+  if (!phone) {
+    if (errEl) { errEl.textContent = '⚠️ Phone Number is required.'; errEl.style.display = 'block'; }
+    focusEl('quick-cust-phone');
+    return;
+  }
+
+  setBtnLoading('btn-save-quick-customer', true, 'Saving...');
+  try {
+    const res = await fetch(`${API}/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+
+    const newCust = json.data;
+    if (!state.customers) state.customers = [];
+    state.customers.push(newCust);
+
+    const selectEl = document.getElementById('txn-customer-select');
+    if (selectEl) {
+      const addNewOpt = selectEl.querySelector('option[value="__ADD_NEW__"]');
+      const newOpt = document.createElement('option');
+      newOpt.value = newCust.id;
+      newOpt.textContent = `${newCust.name} (${newCust.phone || ''})`;
+
+      if (addNewOpt) {
+        selectEl.insertBefore(newOpt, addNewOpt);
+      } else {
+        selectEl.appendChild(newOpt);
+      }
+
+      selectEl.value = newCust.id;
+      selectEl.dataset.previousValue = newCust.id;
+    }
+
+    state.currentCustomerId = newCust.id;
+    showToast(`✓ Customer "${name}" added and selected!`, 'success');
+    closeQuickAddCustomerModal();
+  } catch (err) {
+    if (errEl) {
+      errEl.textContent = 'Error saving customer: ' + err.message;
+      errEl.style.display = 'block';
+    } else {
+      showToast('Error: ' + err.message, 'error');
+    }
+  } finally {
+    setBtnLoading('btn-save-quick-customer', false, 'Save & Select');
+  }
+}
+
+// ── Add Transaction Modal ───────────────────────────────────────
+function openAddTransactionModal(type) {
+  populateCustomerDropdown(state.currentCustomerId);
   clearFields(['txn-amount', 'txn-note']);
-  setTxnType(type || state.selectedTxnType);
+  setTxnType(type || state.selectedTxnType || 'UDHAR');
   openModal('modal-add-transaction');
   setTimeout(() => focusEl('txn-amount'), 120);
 }
+
 
 function setTxnType(type) {
   state.selectedTxnType = type;

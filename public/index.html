@@ -250,6 +250,20 @@
         <button class="modal-close" onclick="closeModal('modal-add-transaction')">✕</button>
       </div>
       <div class="modal-body">
+        <!-- Customer Selection -->
+        <div class="form-group" id="group-txn-customer" style="margin-bottom: 14px;">
+          <label class="form-label" for="txn-customer-select">Step 1: Select Customer *</label>
+          <div class="select-with-btn-group">
+            <select id="txn-customer-select" class="form-select" required onchange="handleCustomerSelectChange(this)">
+              <option value="">-- Choose Customer --</option>
+              <option value="__ADD_NEW__" class="add-new-option">➕ + Add New Customer...</option>
+            </select>
+            <button type="button" class="btn-quick-add" onclick="openQuickAddCustomerModal()">
+              + Add Customer
+            </button>
+          </div>
+        </div>
+
         <!-- Entry Type Explainer -->
         <div class="txn-explainer" id="txn-explainer"></div>
         <div class="type-toggle" id="txn-type-toggle">
@@ -277,6 +291,37 @@
       </div>
     </div>
   </div>
+
+  <!-- Quick Add Customer Modal Backdrop -->
+  <div class="modal-backdrop hidden" id="quick-customer-modal-overlay" style="z-index: 1200;">
+    <div class="modal-card" style="max-width: 420px; width: 90%;">
+      <div class="modal-top">
+        <h3 class="modal-title">➕ Quick Add Customer</h3>
+        <button class="modal-close" onclick="closeQuickAddCustomerModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 18px 22px;">
+        <form id="quick-add-customer-form" onsubmit="event.preventDefault(); submitQuickAddCustomer(this);">
+          <div id="quick-cust-error" class="inline-error-msg" style="display: none;"></div>
+
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label" for="quick-cust-name">Customer Name <span class="required-asterisk">*</span></label>
+            <input type="text" id="quick-cust-name" name="name" class="form-input" placeholder="e.g. Rahul Sharma" required />
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" for="quick-cust-phone">Phone Number <span class="required-asterisk">*</span></label>
+            <input type="tel" id="quick-cust-phone" name="phone" class="form-input" placeholder="e.g. 9876543210" required />
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick="closeQuickAddCustomerModal()">Cancel</button>
+            <button type="submit" class="btn-primary" id="btn-save-quick-customer">Save & Select</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Voice Entry Modal -->
   <div class="modal-backdrop hidden" id="modal-voice">

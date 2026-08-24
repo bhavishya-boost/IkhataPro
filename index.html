@@ -244,6 +244,37 @@
       </div>
     </div>
 
+    <!-- Lightweight Quick Add Customer Modal Overlay -->
+    <div class="modal-overlay" id="quick-customer-modal-overlay" style="z-index: 1200; display: none;">
+      <div class="modal-card quick-modal-card" style="max-width: 420px; width: 90%;">
+        <div class="modal-header">
+          <h3>➕ Quick Add Customer</h3>
+          <button class="close-btn" type="button" onclick="window.iKhataUI.closeQuickAddCustomerModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 16px;">
+          <form id="quick-add-customer-form" onsubmit="event.preventDefault(); window.iKhataUI.submitQuickAddCustomer(this);">
+            <div id="quick-cust-error" class="inline-error-msg" style="display: none;"></div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label" for="quick-cust-name">Customer Name <span class="required-asterisk">*</span></label>
+              <input type="text" id="quick-cust-name" name="name" class="form-input" placeholder="e.g. Rahul Sharma" required />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label" for="quick-cust-phone">Phone Number <span class="required-asterisk">*</span></label>
+              <input type="tel" id="quick-cust-phone" name="phone" class="form-input" placeholder="e.g. 9876543210" required />
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="window.iKhataUI.closeQuickAddCustomerModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="btn-save-quick-customer">Save & Select</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+
     <!-- Command Palette Search Modal -->
     <div class="modal-overlay" id="search-palette-modal">
       <div class="modal-card" style="max-width: 600px;">

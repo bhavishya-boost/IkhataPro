@@ -381,10 +381,7 @@ window.iKhataUI = {
               </div>
 
               <div class="form-group">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <label class="form-label" style="font-weight: 700;">Password</label>
-                  <span style="font-size: 0.78rem; color: var(--primary); font-weight: 600;">Demo: Pass123!</span>
-                </div>
+                <label class="form-label" style="font-weight: 700;">Password</label>
                 <div class="input-with-icon">
                   <span class="input-icon-prefix">🔒</span>
                   <input type="password" id="login-password-field" name="password" class="form-input" placeholder="••••••••" required>
@@ -397,33 +394,7 @@ window.iKhataUI = {
               </button>
             </form>
 
-            <!-- Pre-provisioned Demo Accounts 1-Click Login -->
-            <div style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 18px;">
-              <div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.05em;">
-                ⚡ 1-CLICK DEMO ACCOUNTS LOGIN:
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div class="demo-preset-chip" onclick="window.iKhataUI.quickLogin('aryan', 'Pass123!', 'ljs-jewellers');">
-                  <div style="font-size: 1.4rem;">💎</div>
-                  <div style="flex: 1;">
-                    <div style="font-weight: 700; font-size: 0.9rem;">LJS Jewellers & General Store</div>
-                    <div style="font-size: 0.78rem; color: var(--text-muted);">Mathura • Owner: Aryan Soni</div>
-                  </div>
-                  <div style="font-size: 0.85rem; color: var(--primary); font-weight: 700;">Login →</div>
-                </div>
-
-                <div class="demo-preset-chip" onclick="window.iKhataUI.quickLogin('rahul', 'Pass123!', 'sharma-electronics');">
-                  <div style="font-size: 1.4rem;">⚡</div>
-                  <div style="flex: 1;">
-                    <div style="font-weight: 700; font-size: 0.9rem;">Sharma Electronics & Appliances</div>
-                    <div style="font-size: 0.78rem; color: var(--text-muted);">Delhi • Owner: Rahul Sharma</div>
-                  </div>
-                  <div style="font-size: 0.85rem; color: var(--primary); font-weight: 700;">Login →</div>
-                </div>
-              </div>
-            </div>
-
-            <div style="text-align: center; margin-top: 20px;">
+            <div style="text-align: center; margin-top: 24px;">
               <a href="#welcome" style="font-size: 0.88rem; color: var(--text-muted); font-weight: 600;">← Back to Main Menu</a>
             </div>
 
@@ -588,13 +559,19 @@ window.iKhataUI = {
   openAddKhataModal(defaultType = 'GAVE', preselectCustomerId = '') {
     const customers = window.iKhataStore.getCustomers();
     this.openModal('Add Khata Entry', `
-      <form onsubmit="event.preventDefault(); window.iKhataUI.submitAddKhata(this);">
+      <form id="khata-entry-form" onsubmit="event.preventDefault(); window.iKhataUI.submitAddKhata(this);">
         <div class="form-group">
           <label class="form-label">Step 1: Select Customer</label>
-          <select name="customerId" class="form-select" required>
-            <option value="">-- Choose Customer --</option>
-            ${customers.map(c => `<option value="${c.id}" ${c.id === preselectCustomerId ? 'selected' : ''}>${c.name} (${c.phone})</option>`).join('')}
-          </select>
+          <div class="select-with-btn-group">
+            <select name="customerId" id="khata-customer-select" class="form-select" required onchange="window.iKhataUI.handleCustomerSelectChange(this)">
+              <option value="">-- Choose Customer --</option>
+              ${customers.map(c => `<option value="${c.id}" ${c.id === preselectCustomerId ? 'selected' : ''}>${c.name} (${c.phone || ''})</option>`).join('')}
+              <option value="__ADD_NEW__" class="add-new-option">➕ + Add New Customer...</option>
+            </select>
+            <button type="button" class="btn btn-secondary btn-quick-add" onclick="window.iKhataUI.openQuickAddCustomerModal()">
+              + Add Customer
+            </button>
+          </div>
         </div>
 
         <div class="form-group">
@@ -628,6 +605,148 @@ window.iKhataUI = {
       </form>
     `);
   },
+
+  handleCustomerSelectChange(selectEl) {
+    if (selectEl.value === '__ADD_NEW__') {
+      selectEl.value = selectEl.dataset.previousValue || '';
+      this.openQuickAddCustomerModal();
+    } else {
+      selectEl.dataset.previousValue = selectEl.value;
+    }
+  },
+
+  openQuickAddCustomerModal() {
+    let overlay = document.getElementById('quick-customer-modal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.id = 'quick-customer-modal-overlay';
+      overlay.style.zIndex = '1200';
+      overlay.innerHTML = `
+        <div class="modal-card quick-modal-card" style="max-width: 420px; width: 90%;">
+          <div class="modal-header">
+            <h3>➕ Quick Add Customer</h3>
+            <button class="close-btn" type="button" onclick="window.iKhataUI.closeQuickAddCustomerModal()">✕</button>
+          </div>
+          <div class="modal-body" style="padding: 16px;">
+            <form id="quick-add-customer-form" onsubmit="event.preventDefault(); window.iKhataUI.submitQuickAddCustomer(this);">
+              <div id="quick-cust-error" class="inline-error-msg" style="display: none;"></div>
+
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="quick-cust-name">Customer Name <span class="required-asterisk">*</span></label>
+                <input type="text" id="quick-cust-name" name="name" class="form-input" placeholder="e.g. Rahul Sharma" required />
+              </div>
+
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="quick-cust-phone">Phone Number <span class="required-asterisk">*</span></label>
+                <input type="tel" id="quick-cust-phone" name="phone" class="form-input" placeholder="e.g. 9876543210" required />
+              </div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="window.iKhataUI.closeQuickAddCustomerModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-quick-customer">Save & Select</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    const errorEl = document.getElementById('quick-cust-error');
+    if (errorEl) {
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+    }
+    const nameInput = document.getElementById('quick-cust-name');
+    const phoneInput = document.getElementById('quick-cust-phone');
+    if (nameInput) nameInput.value = '';
+    if (phoneInput) phoneInput.value = '';
+
+    overlay.classList.add('open');
+    overlay.style.display = 'flex';
+
+    setTimeout(() => {
+      if (nameInput) nameInput.focus();
+    }, 100);
+  },
+
+  closeQuickAddCustomerModal() {
+    const overlay = document.getElementById('quick-customer-modal-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      overlay.style.display = 'none';
+    }
+  },
+
+  submitQuickAddCustomer(form) {
+    const errorEl = document.getElementById('quick-cust-error');
+    const nameInput = document.getElementById('quick-cust-name') || form.querySelector('[name="name"]');
+    const phoneInput = document.getElementById('quick-cust-phone') || form.querySelector('[name="phone"]');
+
+    const name = nameInput ? nameInput.value.trim() : '';
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+
+    if (errorEl) {
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+    }
+
+    if (!name && !phone) {
+      if (errorEl) {
+        errorEl.textContent = '⚠️ Customer Name and Phone Number are both required.';
+        errorEl.style.display = 'block';
+      }
+      if (nameInput) nameInput.focus();
+      return false;
+    }
+
+    if (!name) {
+      if (errorEl) {
+        errorEl.textContent = '⚠️ Customer Name is required.';
+        errorEl.style.display = 'block';
+      }
+      if (nameInput) nameInput.focus();
+      return false;
+    }
+
+    if (!phone) {
+      if (errorEl) {
+        errorEl.textContent = '⚠️ Phone Number is required.';
+        errorEl.style.display = 'block';
+      }
+      if (phoneInput) phoneInput.focus();
+      return false;
+    }
+
+    const newCust = window.iKhataStore.addCustomer({
+      name: name,
+      phone: phone
+    });
+
+    if (newCust) {
+      const selectEl = document.getElementById('khata-customer-select');
+      if (selectEl) {
+        const addNewOpt = selectEl.querySelector('option[value="__ADD_NEW__"]');
+        const newOpt = document.createElement('option');
+        newOpt.value = newCust.id;
+        newOpt.textContent = `${newCust.name} (${newCust.phone})`;
+
+        if (addNewOpt) {
+          selectEl.insertBefore(newOpt, addNewOpt);
+        } else {
+          selectEl.appendChild(newOpt);
+        }
+
+        selectEl.value = newCust.id;
+        selectEl.dataset.previousValue = newCust.id;
+      }
+
+      this.closeQuickAddCustomerModal();
+      this.showToast(`✓ Customer "${newCust.name}" added and selected!`, 'success');
+    }
+  },
+
 
   setKhataType(type) {
     const gaveBtn = document.getElementById('toggle-gave-btn');
