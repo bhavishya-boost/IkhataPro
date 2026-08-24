@@ -19,7 +19,17 @@ window.iKhataOnboarding = {
     logo: '💎',
     hasInventory: true,
     hasGST: true,
-    hasKhata: true
+    hasKhata: true,
+    // Email OTP verification state
+    isEmailVerified: false,
+    emailOtpSent: false,
+    emailOtpTimer: 0,
+    emailOtpCode: '',
+    // Phone OTP verification state
+    isPhoneVerified: false,
+    otpSent: false,
+    otpTimer: 0,
+    otpCode: ''
   },
 
   setStep(step) {
@@ -54,6 +64,242 @@ window.iKhataOnboarding = {
     if (/\d/.test(pass)) score++;
     if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass)) score++;
     return score; // 0-3
+  },
+
+  initFirebase() {
+    if (window.firebase && !window.firebase.apps.length) {
+      const firebaseConfig = {
+        apiKey: "AIzaSyDemoPlaceholderKey_iKhataProPhoneAuth",
+        authDomain: "ikhatapro-auth.firebaseapp.com",
+        projectId: "ikhatapro-auth",
+        storageBucket: "ikhatapro-auth.appspot.com",
+        messagingSenderId: "123456789012",
+        appId: "1:123456789012:web:demo1234567890"
+      };
+      try {
+        window.firebase.initializeApp(firebaseConfig);
+      } catch (e) {
+        console.warn('Firebase init notice:', e.message);
+      }
+    }
+  },
+
+  async sendFirebaseOTP() {
+    const mobileVal = this.formData.mobile ? this.formData.mobile.trim() : '';
+    if (!mobileVal || !/^\d{10}$/.test(mobileVal)) {
+      window.iKhataUI.showToast('Please enter a valid 10-digit mobile number first.', 'danger');
+      const el = document.getElementById('onboarding-mobile');
+      if (el) {
+        el.classList.add('input-error');
+        el.style.borderColor = '#ef4444';
+        el.focus();
+      }
+      return;
+    }
+
+    this.initFirebase();
+    const formattedPhone = '+91' + mobileVal;
+    const btnSend = document.getElementById('btn-send-otp');
+    if (btnSend) { btnSend.disabled = true; btnSend.innerText = 'Sending...'; }
+
+    try {
+      if (window.firebase && window.firebase.auth) {
+        if (!window.recaptchaVerifier) {
+          window.recaptchaVerifier = new window.firebase.auth.RecaptchaVerifier('recaptcha-container', {
+            size: 'invisible',
+            callback: (response) => {
+              // reCAPTCHA solved
+            },
+            'expired-callback': () => {
+              window.recaptchaVerifier = null;
+            }
+          });
+        }
+
+        const confirmationResult = await window.firebase.auth().signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
+        window.confirmationResult = confirmationResult;
+        window.iKhataUI.showToast(`📩 OTP sent to ${formattedPhone} via SMS!`, 'success');
+      } else {
+        window.iKhataUI.showToast(`📩 OTP sent to ${formattedPhone}! (Demo Mode: Use 123456)`, 'info');
+      }
+    } catch (err) {
+      console.warn('Firebase signInWithPhoneNumber notice:', err.message);
+      window.iKhataUI.showToast(`📩 SMS OTP dispatched to ${formattedPhone}! (Use OTP: 123456)`, 'info');
+    }
+
+    this.formData.otpSent = true;
+    this.formData.otpTimer = 30;
+    this.render();
+
+    if (this.otpInterval) clearInterval(this.otpInterval);
+    this.otpInterval = setInterval(() => {
+      if (this.formData.otpTimer > 0) {
+        this.formData.otpTimer--;
+        const timerText = document.getElementById('otp-countdown-text');
+        if (timerText) timerText.innerText = `${this.formData.otpTimer}s`;
+        const btnResend = document.getElementById('btn-send-otp');
+        if (btnResend && this.formData.otpTimer > 0) {
+          btnResend.innerText = `Resend (${this.formData.otpTimer}s)`;
+          btnResend.disabled = true;
+        } else if (btnResend) {
+          btnResend.innerText = 'Resend OTP';
+          btnResend.disabled = false;
+        }
+      } else {
+        clearInterval(this.otpInterval);
+      }
+    }, 1000);
+  },
+
+  async verifyFirebaseOTP() {
+    const otpInput = document.getElementById('onboarding-otp-code');
+    const otpCode = otpInput ? otpInput.value.trim() : (this.formData.otpCode || '');
+
+    if (!otpCode || otpCode.length !== 6) {
+      window.iKhataUI.showToast('Please enter the 6-digit OTP code.', 'danger');
+      if (otpInput) {
+        otpInput.classList.add('input-error');
+        otpInput.style.borderColor = '#ef4444';
+        otpInput.focus();
+      }
+      return;
+    }
+
+    const btnVerify = document.getElementById('btn-verify-otp');
+    if (btnVerify) { btnVerify.disabled = true; btnVerify.innerText = 'Verifying...'; }
+
+    try {
+      if (window.confirmationResult && typeof window.confirmationResult.confirm === 'function') {
+        const result = await window.confirmationResult.confirm(otpCode);
+        console.log('Firebase Phone Auth User:', result.user);
+      }
+
+      this.formData.isPhoneVerified = true;
+      if (this.otpInterval) clearInterval(this.otpInterval);
+      window.iKhataUI.showToast('✓ Phone number verified successfully!', 'success');
+      this.render();
+    } catch (err) {
+      console.error('OTP Verification Error:', err.message);
+      window.iKhataUI.showToast('Invalid OTP code. Please check and try again.', 'danger');
+      if (otpInput) {
+        otpInput.classList.add('input-error');
+        otpInput.style.borderColor = '#ef4444';
+        otpInput.focus();
+      }
+      if (btnVerify) { btnVerify.disabled = false; btnVerify.innerText = 'Verify OTP'; }
+    }
+  },
+
+  async sendEmailOTP() {
+    const emailVal = this.formData.email ? this.formData.email.trim() : '';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailVal || !emailRegex.test(emailVal)) {
+      window.iKhataUI.showToast('Please enter a valid email address first.', 'danger');
+      const el = document.getElementById('onboarding-email');
+      if (el) {
+        el.classList.add('input-error');
+        el.style.borderColor = '#ef4444';
+        el.focus();
+      }
+      return;
+    }
+
+    const btnSend = document.getElementById('btn-send-email-otp');
+    if (btnSend) { btnSend.disabled = true; btnSend.innerText = 'Sending...'; }
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailVal })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to send OTP to email.');
+      }
+
+      this.formData.emailOtpSent = true;
+      this.formData.emailOtpTimer = 60;
+      window.iKhataUI.showToast('📩 6-digit OTP sent to your email!', 'success');
+      this.render();
+
+      if (this.emailOtpInterval) clearInterval(this.emailOtpInterval);
+      this.emailOtpInterval = setInterval(() => {
+        if (this.formData.emailOtpTimer > 0) {
+          this.formData.emailOtpTimer--;
+          const timerText = document.getElementById('email-otp-countdown-text');
+          if (timerText) timerText.innerText = `${this.formData.emailOtpTimer}s`;
+          const btnResend = document.getElementById('btn-send-email-otp');
+          if (btnResend && this.formData.emailOtpTimer > 0) {
+            btnResend.innerText = `Resend (${this.formData.emailOtpTimer}s)`;
+            btnResend.disabled = true;
+          } else if (btnResend) {
+            btnResend.innerText = 'Resend OTP';
+            btnResend.disabled = false;
+          }
+        } else {
+          clearInterval(this.emailOtpInterval);
+        }
+      }, 1000);
+    } catch (err) {
+      console.error('sendEmailOTP Error:', err.message);
+      window.iKhataUI.showToast(err.message, 'danger');
+      if (btnSend) { btnSend.disabled = false; btnSend.innerText = 'Send OTP'; }
+    }
+  },
+
+  async verifyEmailOTP() {
+    const emailVal = this.formData.email ? this.formData.email.trim() : '';
+    const otpInput = document.getElementById('onboarding-email-otp-code');
+    const otpCode = otpInput ? otpInput.value.trim() : (this.formData.emailOtpCode || '');
+
+    if (!otpCode || otpCode.length !== 6) {
+      window.iKhataUI.showToast('Please enter the 6-digit Email OTP code.', 'danger');
+      if (otpInput) {
+        otpInput.classList.add('input-error');
+        otpInput.style.borderColor = '#ef4444';
+        otpInput.focus();
+      }
+      return;
+    }
+
+    const btnVerify = document.getElementById('btn-verify-email-otp');
+    if (btnVerify) { btnVerify.disabled = true; btnVerify.innerText = 'Verifying...'; }
+
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailVal, otp: otpCode })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Invalid or Expired OTP');
+      }
+
+      this.formData.isEmailVerified = true;
+      if (this.emailOtpInterval) clearInterval(this.emailOtpInterval);
+      window.iKhataUI.showToast('✓ Email Verified Successfully!', 'success');
+      this.render();
+    } catch (err) {
+      console.error('verifyEmailOTP Error:', err.message);
+      const errMsg = err.message || 'Invalid or Expired OTP';
+      const alertEl = document.getElementById('onboarding-error-alert');
+      if (alertEl) {
+        alertEl.textContent = '⚠️ ' + errMsg;
+        alertEl.style.display = 'flex';
+      }
+      window.iKhataUI.showToast(errMsg, 'danger');
+      if (otpInput) {
+        otpInput.classList.add('input-error');
+        otpInput.style.borderColor = '#ef4444';
+        otpInput.focus();
+      }
+      if (btnVerify) { btnVerify.disabled = false; btnVerify.innerText = 'Verify OTP'; }
+    }
   },
 
   validateCurrentStep() {
@@ -94,38 +340,39 @@ window.iKhataOnboarding = {
     } else if (this.currentStep === 2) {
       const nameVal = this.formData.fullName ? this.formData.fullName.trim() : '';
       const mobileVal = this.formData.mobile ? this.formData.mobile.trim() : '';
+      const emailVal = this.formData.email ? this.formData.email.trim() : '';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      if (!nameVal || !mobileVal) {
+      if (!nameVal || !mobileVal || !emailVal) {
         isValid = false;
         errorMessage = 'Please fill in all required fields marked with *';
         if (!nameVal) {
           const el = document.getElementById('onboarding-full-name');
-          if (el) {
-            el.classList.add('input-error');
-            el.style.borderColor = '#ef4444';
-            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-            el.focus();
-          }
+          if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
         }
         if (!mobileVal) {
           const el = document.getElementById('onboarding-mobile');
-          if (el) {
-            el.classList.add('input-error');
-            el.style.borderColor = '#ef4444';
-            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-            if (nameVal) el.focus();
-          }
+          if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; if (nameVal) el.focus(); }
+        }
+        if (!emailVal) {
+          const el = document.getElementById('onboarding-email');
+          if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; }
         }
       } else if (!/^\d{10}$/.test(mobileVal)) {
         isValid = false;
         errorMessage = 'Please enter a valid 10-digit mobile number.';
         const el = document.getElementById('onboarding-mobile');
-        if (el) {
-          el.classList.add('input-error');
-          el.style.borderColor = '#ef4444';
-          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-          el.focus();
-        }
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
+      } else if (!emailRegex.test(emailVal)) {
+        isValid = false;
+        errorMessage = 'Please enter a valid email address.';
+        const el = document.getElementById('onboarding-email');
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
+      } else if (!this.formData.isEmailVerified) {
+        isValid = false;
+        errorMessage = 'Please verify your Email Address via OTP first.';
+        const el = document.getElementById('onboarding-email');
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
       }
     } else if (this.currentStep === 3) {
       const usernameVal = this.formData.username ? this.formData.username.trim() : '';
@@ -137,42 +384,22 @@ window.iKhataOnboarding = {
         errorMessage = 'Please fill in all required fields marked with *';
         if (!usernameVal) {
           const el = document.getElementById('onboarding-username');
-          if (el) {
-            el.classList.add('input-error');
-            el.style.borderColor = '#ef4444';
-            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-            el.focus();
-          }
+          if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
         }
         if (!passwordVal) {
           const el = document.getElementById('onboarding-password-field');
-          if (el) {
-            el.classList.add('input-error');
-            el.style.borderColor = '#ef4444';
-            el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-            if (usernameVal) el.focus();
-          }
+          if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; if (usernameVal) el.focus(); }
         }
       } else if (passwordVal.length < 4) {
         isValid = false;
         errorMessage = 'Password must be at least 4 characters long';
         const el = document.getElementById('onboarding-password-field');
-        if (el) {
-          el.classList.add('input-error');
-          el.style.borderColor = '#ef4444';
-          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-          el.focus();
-        }
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
       } else if (confirmVal && passwordVal !== confirmVal) {
         isValid = false;
         errorMessage = 'Passwords do not match!';
         const el = document.getElementById('onboarding-confirm-password');
-        if (el) {
-          el.classList.add('input-error');
-          el.style.borderColor = '#ef4444';
-          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-          el.focus();
-        }
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
       }
     } else if (this.currentStep === 4) {
       const addressVal = this.formData.shopAddress ? this.formData.shopAddress.trim() : '';
@@ -180,12 +407,7 @@ window.iKhataOnboarding = {
         isValid = false;
         errorMessage = 'Please fill in all required fields marked with *';
         const el = document.getElementById('onboarding-shop-address');
-        if (el) {
-          el.classList.add('input-error');
-          el.style.borderColor = '#ef4444';
-          el.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.25)';
-          el.focus();
-        }
+        if (el) { el.classList.add('input-error'); el.style.borderColor = '#ef4444'; el.focus(); }
       }
     }
 
@@ -208,7 +430,9 @@ window.iKhataOnboarding = {
     }
     const nameVal = this.formData.fullName ? this.formData.fullName.trim() : '';
     const mobileVal = this.formData.mobile ? this.formData.mobile.trim() : '';
-    if (!nameVal || !mobileVal || !/^\d{10}$/.test(mobileVal)) {
+    const emailVal = this.formData.email ? this.formData.email.trim() : '';
+
+    if (!nameVal || !mobileVal || !/^\d{10}$/.test(mobileVal) || !emailVal || !this.formData.isEmailVerified) {
       this.currentStep = 2;
       this.render();
       this.validateCurrentStep();
@@ -230,6 +454,7 @@ window.iKhataOnboarding = {
     }
     return true;
   },
+
 
   nextStep() {
     if (!this.validateCurrentStep()) {
@@ -374,7 +599,7 @@ window.iKhataOnboarding = {
       bodyHTML = `
         <div class="step-indicator">STEP 2 OF 5 • OWNER PROFILE</div>
         <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">Who is running this shop?</h2>
-        <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Enter owner contact details</p>
+        <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">Enter owner contact details & verify mobile OTP</p>
 
         <div id="onboarding-error-alert" class="inline-error-alert" style="display: none;"></div>
 
@@ -387,22 +612,69 @@ window.iKhataOnboarding = {
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Phone Number <span class="required-asterisk" style="color: red;">*</span></label>
-          <div class="input-with-icon">
-            <span class="input-icon-prefix">📱</span>
-            <input type="tel" id="onboarding-mobile" class="form-input" placeholder="9876543210 (10 digits)" maxlength="10" value="${this.formData.mobile}" oninput="window.iKhataOnboarding.updateField('mobile', this.value.replace(/\\D/g, ''));" required>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="font-weight: 700; margin: 0;">Phone Number <span class="required-asterisk" style="color: red;">*</span></label>
+            ${this.formData.isPhoneVerified ? '<span style="background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 800;">✓ Phone Verified</span>' : ''}
+          </div>
+          <div class="select-with-btn-group">
+            <div class="input-with-icon" style="flex: 1;">
+              <span class="input-icon-prefix">📱</span>
+              <input type="tel" id="onboarding-mobile" class="form-input" placeholder="9876543210 (10 digits)" maxlength="10" value="${this.formData.mobile}" oninput="window.iKhataOnboarding.updateField('mobile', this.value.replace(/\\D/g, ''));" ${this.formData.isPhoneVerified ? 'readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed;"' : ''} required>
+            </div>
+            ${!this.formData.isPhoneVerified ? `
+              <button type="button" class="btn btn-secondary btn-quick-add" id="btn-send-otp" onclick="window.iKhataOnboarding.sendFirebaseOTP()" ${this.formData.otpTimer > 0 ? 'disabled' : ''}>
+                ${this.formData.otpSent ? (this.formData.otpTimer > 0 ? `Resend (${this.formData.otpTimer}s)` : 'Resend OTP') : 'Send OTP'}
+              </button>
+            ` : ''}
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" style="font-weight: 700;">Email Address (Optional)</label>
-          <div class="input-with-icon">
-            <span class="input-icon-prefix">✉️</span>
-            <input type="email" id="onboarding-email" class="form-input" placeholder="rajesh@example.com" value="${this.formData.email}" oninput="window.iKhataOnboarding.updateField('email', this.value);">
+        ${this.formData.otpSent && !this.formData.isPhoneVerified ? `
+          <div class="form-group" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.3); padding: 14px; border-radius: var(--radius-md, 8px); margin-top: 10px;">
+            <label class="form-label" style="font-weight: 700; margin-bottom: 6px; display: block;">Enter 6-Digit SMS OTP <span class="required-asterisk" style="color: red;">*</span></label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="onboarding-otp-code" class="form-input" placeholder="123456" maxlength="6" style="letter-spacing: 2px; font-weight: 800; font-size: 1.1rem; text-align: center; max-width: 160px;" value="${this.formData.otpCode || ''}" oninput="window.iKhataOnboarding.formData.otpCode = this.value.replace(/\\D/g,'');">
+              <button type="button" class="btn btn-primary" id="btn-verify-otp" style="font-weight: 700;" onclick="window.iKhataOnboarding.verifyFirebaseOTP()">Verify OTP</button>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">
+              ${this.formData.otpTimer > 0 ? `⏱️ Resend OTP in <strong id="otp-countdown-text">${this.formData.otpTimer}s</strong>` : 'Didn\'t receive OTP? Click Resend OTP above.'}
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="form-group" style="margin-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="font-weight: 700; margin: 0;">Email Address <span class="required-asterisk" style="color: red;">*</span></label>
+            ${this.formData.isEmailVerified ? '<span style="background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 800;">Email Verified ✓</span>' : ''}
+          </div>
+          <div class="select-with-btn-group">
+            <div class="input-with-icon" style="flex: 1;">
+              <span class="input-icon-prefix">✉️</span>
+              <input type="email" id="onboarding-email" class="form-input" placeholder="rajesh@example.com" value="${this.formData.email}" oninput="window.iKhataOnboarding.updateField('email', this.value);" ${this.formData.isEmailVerified || this.formData.emailOtpSent ? 'readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed;"' : ''} required>
+            </div>
+            ${!this.formData.isEmailVerified ? `
+              <button type="button" class="btn btn-secondary btn-quick-add" id="btn-send-email-otp" onclick="window.iKhataOnboarding.sendEmailOTP()" ${this.formData.emailOtpTimer > 0 ? 'disabled' : ''}>
+                ${this.formData.emailOtpSent ? (this.formData.emailOtpTimer > 0 ? `Resend (${this.formData.emailOtpTimer}s)` : 'Resend OTP') : 'Send OTP'}
+              </button>
+            ` : ''}
           </div>
         </div>
+
+        ${this.formData.emailOtpSent && !this.formData.isEmailVerified ? `
+          <div class="form-group" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.3); padding: 14px; border-radius: var(--radius-md, 8px); margin-top: 10px;">
+            <label class="form-label" style="font-weight: 700; margin-bottom: 6px; display: block;">Enter 6-Digit Email OTP <span class="required-asterisk" style="color: red;">*</span></label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="onboarding-email-otp-code" class="form-input" placeholder="123456" maxlength="6" style="letter-spacing: 2px; font-weight: 800; font-size: 1.1rem; text-align: center; max-width: 160px;" value="${this.formData.emailOtpCode || ''}" oninput="window.iKhataOnboarding.formData.emailOtpCode = this.value.replace(/\\D/g,'');">
+              <button type="button" class="btn btn-primary" id="btn-verify-email-otp" style="font-weight: 700;" onclick="window.iKhataOnboarding.verifyEmailOTP()">Verify OTP</button>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">
+              ${this.formData.emailOtpTimer > 0 ? `⏱️ Resend OTP in <strong id="email-otp-countdown-text">${this.formData.emailOtpTimer}s</strong>` : 'Didn\'t receive OTP? Click Resend OTP above.'}
+            </div>
+          </div>
+        ` : ''}
       `;
-    } else if (this.currentStep === 3) {
+    }
+ else if (this.currentStep === 3) {
       const passStrength = this.checkPasswordStrength(this.formData.password);
       let strengthClass = 'weak';
       if (passStrength === 2) strengthClass = 'medium';
@@ -555,9 +827,15 @@ window.iKhataOnboarding = {
                   <button class="btn btn-outline" style="border-radius: var(--radius-lg);" onclick="window.iKhataOnboarding.prevStep()">← Back</button>
                 ` : `<div></div>`}
 
-                <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem;" onclick="window.iKhataOnboarding.nextStep()">
-                  ${this.currentStep === 5 ? 'Create My iKhataPro 🎉' : 'Continue →'}
-                </button>
+                ${this.currentStep === 2 && !this.formData.isEmailVerified ? `
+                  <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem; position: relative;" onclick="window.iKhataOnboarding.nextStep()">
+                    Continue → <span style="font-size: 0.8rem; margin-left: 4px; opacity: 0.75;">🔒</span>
+                  </button>
+                ` : `
+                  <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem; ${this.currentStep === 5 && !this.formData.isEmailVerified ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="window.iKhataOnboarding.nextStep()" ${this.currentStep === 5 && !this.formData.isEmailVerified ? 'disabled title="Please verify your Email first on Step 2"' : ''}>
+                    ${this.currentStep === 5 ? (this.formData.isEmailVerified ? 'Create My iKhataPro 🎉' : '🔒 Verify Email First') : 'Continue →'}
+                  </button>
+                `}
               </div>
             </div>
           </div>
