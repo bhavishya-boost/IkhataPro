@@ -143,39 +143,40 @@ window.iKhataEmployees = {
 
   saveNewEmployee() {
     const name  = document.getElementById('emp-name-input')?.value?.trim();
-    const phone = document.getElementById('emp-phone-input')?.value?.trim();
+    const rawPhone = document.getElementById('emp-phone-input')?.value?.trim() || '';
     const role  = document.getElementById('emp-role-input')?.value;
 
-    if (!name || !phone) {
+    if (!name || !rawPhone) {
       window.iKhataUI.showToast('❌ Naam aur phone number daalein!', 'error');
       return;
     }
-    if (!/^\d{10}$/.test(phone)) {
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
       window.iKhataUI.showToast('❌ Valid 10-digit phone number daalein!', 'error');
       return;
     }
 
-    const newEmp = { name, phone, role, sales: 0, collections: 0 };
+    const newEmp = { name, phone: cleanPhone, role, sales: 0, collections: 0 };
 
-    // Store mein add karo
     if (window.iKhataStore && typeof window.iKhataStore.addEmployee === 'function') {
       window.iKhataStore.addEmployee(newEmp);
     } else {
-      // Fallback: state mein push karo
-      const state = window.iKhataStore?.getState?.() || {};
-      if (!state.employees) state.employees = [];
-      state.employees.push(newEmp);
+      if (!window.iKhataStore.state.employees) window.iKhataStore.state.employees = [];
+      window.iKhataStore.state.employees.push(newEmp);
+      window.iKhataStore.saveState();
+      window.iKhataStore.notify();
     }
 
     window.iKhataUI.closeModal();
     window.iKhataUI.showToast(`✅ ${name} ko add kar diya gaya!`, 'success');
 
-    // Page re-render karo
-    if (window.iKhataApp && typeof window.iKhataApp.navigate === 'function') {
+    if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+      window.iKhataUI.refresh();
+    } else if (window.iKhataApp && typeof window.iKhataApp.navigate === 'function') {
       window.iKhataApp.navigate('employees');
     } else {
       const main = document.getElementById('main-content');
-      if (main) main.innerHTML = window.iKhataEmployees.render(window.iKhataStore?.getState?.() || {});
+      if (main) main.innerHTML = window.iKhataEmployees.render(window.iKhataStore?.state || {});
     }
   }
 };

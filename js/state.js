@@ -162,19 +162,43 @@
 
       // Merge expenses
       if (cloud.expenses && cloud.expenses.length > 0) {
+        if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
         const localExpIds = new Set(this.state.expenses.map(e => e.id));
         cloud.expenses.forEach(ce => {
-          if (!localExpIds.has(ce.id)) {
-            this.state.expenses.push({
-              id: ce.id, category: ce.category || 'Other',
-              amount: parseFloat(ce.amount) || 0, date: ce.date || '',
-              note: ce.note || '', businessId: bizId, business_id: bizId,
-              isDeleted: ce.is_deleted || false
+          this.state.expenseCloudMap[ce.id] = ce.id;
+          const mappedLocalId = this.state.expenseCloudMap[ce.id];
+          const existsById = localExpIds.has(ce.id) || (mappedLocalId && localExpIds.has(mappedLocalId));
+
+          if (!existsById) {
+            const numAmount = parseFloat(ce.amount) || 0;
+            const ceNote = String(ce.note || '').trim().toLowerCase();
+            const ceCat = String(ce.category || 'Other').trim().toLowerCase();
+            const matchLocal = this.state.expenses.find(le => {
+              const bMatch = (le.business_id === bizId || le.businessId === bizId);
+              if (!bMatch || le.isDeleted) return false;
+              const leAmount = parseFloat(le.amount) || 0;
+              const leNote = String(le.note || '').trim().toLowerCase();
+              const leCat = String(le.category || 'Other').trim().toLowerCase();
+              return leAmount === numAmount && leCat === ceCat && leNote === ceNote && (le.date === ce.date || !ce.date);
             });
-            changed = true;
+
+            if (matchLocal) {
+              this.state.expenseCloudMap[matchLocal.id] = ce.id;
+              this.state.expenseCloudMap[ce.id] = matchLocal.id;
+            } else {
+              this.state.expenses.push({
+                id: ce.id, category: ce.category || 'Other',
+                amount: numAmount, date: ce.date || '',
+                note: ce.note || '', businessId: bizId, business_id: bizId,
+                isDeleted: ce.is_deleted || false
+              });
+              changed = true;
+            }
           }
         });
       }
+
+      this.deduplicateExpenses();
 
       if (changed) {
         this.purgeSampleDemoData();
@@ -216,9 +240,13 @@
 
       const isSample = (name, id, sku, phone, recordBId, note = '', amount = 0) => {
         if (!isDemoStore) {
+          const activeBizId = this.getActiveBusinessId();
+          if (recordBId && recordBId === activeBizId && recordBId !== 'BUS_LJS' && recordBId !== 'BUS_SHARMA') {
+            return false;
+          }
           if (recordBId === 'BUS_LJS' || recordBId === 'BUS_SHARMA') return true;
           if (sku && typeof sku === 'string' && (/^SKU-(GLD|SLV|DIA|ATT|RIC|OIL|DAL|GHE|SUG|COC|TV|BAN|INV|REF|FAN|LED|WM|PUL)-\d+/i).test(sku)) return true;
-          if (id && typeof id === 'string' && (/^(s\d+|cs\d+|c\d+|p\d+|ps\d+|e\d+|e_|st_\d+|PO-\d+|BILL-\d+|BILL-S\d+|INV-\d+|INV-1\d+|INV-2\d+|t\d+|ts\d+|aud_\d+)$/i).test(id)) return true;
+          if (id && typeof id === 'string' && (/^(s\d+|cs\d+|c\d+|p\d+|ps\d+|st_\d+|BILL-S\d+|t\d+|ts\d+|aud_\d+)$/i).test(id)) return true;
           if (phone && (phone === '+91 90000 00000' || phone === '899822892')) return true;
 
           if (note && typeof note === 'string') {
@@ -293,8 +321,62 @@
         this.state.invoices = this.state.invoices.filter(i => !isSample(i.customerName, i.id, null, null, i.business_id || i.businessId, i.note));
       }
 
+      this.deduplicateExpenses();
       this.recalculateTotals();
       this.saveState();
+    }
+
+    deduplicateExpenses() {
+      if (!this.state || !Array.isArray(this.state.expenses)) return;
+      if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
+
+      const activeBizId = this.getActiveBusinessId();
+      const seenGroup = new Map();
+      const duplicatesToRemove = [];
+
+      this.state.expenses.forEach(e => {
+        if (!this.isRecordForActiveBusiness(e) || e.isDeleted) return;
+        const noteStr = String(e.note || '').trim().toLowerCase();
+        const catStr = String(e.category || 'Other').trim().toLowerCase();
+        const amtVal = Math.round((parseFloat(e.amount) || 0) * 100) / 100;
+        const bizKey = e.business_id || e.businessId || activeBizId || 'default';
+        const key = `${bizKey}_${catStr}_${amtVal}_${e.date || ''}_${noteStr}`;
+
+        if (!seenGroup.has(key)) {
+          seenGroup.set(key, e);
+        } else {
+          const firstExp = seenGroup.get(key);
+          let keep = firstExp;
+          let drop = e;
+
+          const firstUuid = this.state.expenseCloudMap[firstExp.id] || (firstExp.id && firstExp.id.length === 36 && firstExp.id.includes('-') ? firstExp.id : null);
+          const currUuid = this.state.expenseCloudMap[e.id] || (e.id && e.id.length === 36 && e.id.includes('-') ? e.id : null);
+
+          if (!firstUuid && currUuid) {
+            keep = e;
+            drop = firstExp;
+            seenGroup.set(key, keep);
+          }
+
+          duplicatesToRemove.push(drop);
+        }
+      });
+
+      if (duplicatesToRemove.length > 0) {
+        const dropIds = new Set(duplicatesToRemove.map(d => d.id));
+        this.state.expenses = this.state.expenses.filter(e => !dropIds.has(e.id));
+        console.log(`🧹 [iKhataPro] Deduplication: removed ${duplicatesToRemove.length} duplicate expense record(s).`);
+
+        if (typeof window !== 'undefined' && window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+          duplicatesToRemove.forEach(d => {
+            const cloudUuid = this.state.expenseCloudMap[d.id] || (d.id && d.id.length === 36 && d.id.includes('-') ? d.id : null);
+            if (cloudUuid) {
+              window.iKhataSupabase.syncExpenseToCloud({ ...d, is_deleted: true }, cloudUuid)
+                .catch(err => console.warn('Duplicate purge cloud sync warning:', err.message));
+            }
+          });
+        }
+      }
     }
 
     // ── PERIODIC CLOUD PULL: Every 30s, fetch fresh data from Supabase ──
@@ -501,8 +583,9 @@
       const isDemoStore = bId === 'BUS_LJS' || bId === 'BUS_SHARMA';
       if (!isDemoStore) {
         if (recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
-        if (record.id && typeof record.id === 'string' && (/^(s\d+|cs\d+|c\d+|p\d+|ps\d+|e\d+|st_\d+|PO-\d+|BILL-\d+|BILL-S\d+|INV-\d+|t\d+|ts\d+|aud_\d+)$/).test(record.id)) {
-          return false;
+        if (recBId && recBId !== bId) {
+          const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
+          if (cachedUuid && recBId !== cachedUuid) return false;
         }
       }
 
@@ -586,7 +669,8 @@
         createdAt: new Date().toISOString()
       };
       this.state.employees.push(newEmp);
-      this.saveToLocalStorage();
+      this.saveState();
+      this.notify();
       return newEmp;
     }
 
@@ -1557,23 +1641,46 @@
 
             // Merge expenses
             if (cloud.expenses && cloud.expenses.length > 0) {
+              if (!this.state.expenseCloudMap) this.state.expenseCloudMap = {};
               const localExpIds = new Set(this.state.expenses.map(e => e.id));
               cloud.expenses.forEach(ce => {
                 this.state.expenseCloudMap[ce.id] = ce.id;
-                if (!localExpIds.has(ce.id)) {
-                  this.state.expenses.push({
-                    id: ce.id,
-                    category: ce.category || 'Other',
-                    amount: parseFloat(ce.amount) || 0,
-                    date: ce.date || '',
-                    note: ce.note || '',
-                    business_id: bizId,
-                    businessId: bizId,
-                    isDeleted: ce.is_deleted || false
+                const mappedLocalId = this.state.expenseCloudMap[ce.id];
+                const existsById = localExpIds.has(ce.id) || (mappedLocalId && localExpIds.has(mappedLocalId));
+
+                if (!existsById) {
+                  const numAmount = parseFloat(ce.amount) || 0;
+                  const ceNote = String(ce.note || '').trim().toLowerCase();
+                  const ceCat = String(ce.category || 'Other').trim().toLowerCase();
+                  const matchLocal = this.state.expenses.find(le => {
+                    const bMatch = (le.business_id === bizId || le.businessId === bizId);
+                    if (!bMatch || le.isDeleted) return false;
+                    const leAmount = parseFloat(le.amount) || 0;
+                    const leNote = String(le.note || '').trim().toLowerCase();
+                    const leCat = String(le.category || 'Other').trim().toLowerCase();
+                    return leAmount === numAmount && leCat === ceCat && leNote === ceNote && (le.date === ce.date || !ce.date);
                   });
+
+                  if (matchLocal) {
+                    this.state.expenseCloudMap[matchLocal.id] = ce.id;
+                    this.state.expenseCloudMap[ce.id] = matchLocal.id;
+                  } else {
+                    this.state.expenses.push({
+                      id: ce.id,
+                      category: ce.category || 'Other',
+                      amount: numAmount,
+                      date: ce.date || '',
+                      note: ce.note || '',
+                      business_id: bizId,
+                      businessId: bizId,
+                      isDeleted: ce.is_deleted || false
+                    });
+                  }
                 }
               });
             }
+
+            this.deduplicateExpenses();
 
             this.saveState();
             this.notify();

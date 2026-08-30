@@ -1465,6 +1465,9 @@
       const productCloudMap = state.productCloudMap || {};
       const supplierCloudMap = state.supplierCloudMap || {};
       const transactionCloudMap = state.transactionCloudMap || {};
+      const expenseCloudMap = state.expenseCloudMap || {};
+      const posBillCloudMap = state.posBillCloudMap || {};
+      const invoiceCloudMap = state.invoiceCloudMap || {};
 
       let syncedCustomers = 0;
       let syncedProducts = 0;
@@ -1551,28 +1554,48 @@
           if ((exp.amount || 0) > 500000) continue; // Skip huge test figures
           const expPayload = { ...exp, business_id: bizUuid };
           delete expPayload.businessId;
-          const res = await this.syncExpenseToCloud(expPayload);
-          if (res.success) syncedExpenses++;
+          const cloudUuid = expenseCloudMap[exp.id] || (exp.id && exp.id.length === 36 && exp.id.includes('-') ? exp.id : null);
+          const res = await this.syncExpenseToCloud(expPayload, cloudUuid);
+          if (res.success && res.expense) {
+            expenseCloudMap[exp.id] = res.expense.id;
+            expenseCloudMap[res.expense.id] = exp.id;
+            syncedExpenses++;
+          }
         }
       }
 
       // 6. POS Bills
       let syncedBills = 0;
-      if (Array.isArray(state.bills)) {
-        for (const bill of state.bills) {
+      const posBillsList = Array.isArray(state.posBills) ? state.posBills : (Array.isArray(state.bills) ? state.bills : []);
+      if (posBillsList.length > 0) {
+        const validBills = posBillsList.filter(isStoreActiveRecord);
+        for (const bill of validBills) {
           const billPayload = { ...bill, business_id: bizUuid };
-          const res = await this.syncPosBillToCloud(billPayload);
-          if (res.success) syncedBills++;
+          const cloudUuid = posBillCloudMap[bill.id] || (bill.id && bill.id.length === 36 && bill.id.includes('-') ? bill.id : null);
+          const mappedCustUuid = customerCloudMap[bill.customerId] || null;
+          const res = await this.syncPosBillToCloud(billPayload, cloudUuid, mappedCustUuid);
+          if (res.success && res.posBill) {
+            posBillCloudMap[bill.id] = res.posBill.id;
+            posBillCloudMap[res.posBill.id] = bill.id;
+            syncedBills++;
+          }
         }
       }
 
       // 7. Invoices
       let syncedInvoices = 0;
       if (Array.isArray(state.invoices)) {
-        for (const inv of state.invoices) {
+        const validInvoices = state.invoices.filter(isStoreActiveRecord);
+        for (const inv of validInvoices) {
           const invPayload = { ...inv, business_id: bizUuid };
-          const res = await this.syncInvoiceToCloud(invPayload);
-          if (res.success) syncedInvoices++;
+          const cloudUuid = invoiceCloudMap[inv.id] || (inv.id && inv.id.length === 36 && inv.id.includes('-') ? inv.id : null);
+          const mappedCustUuid = customerCloudMap[inv.customerId] || null;
+          const res = await this.syncInvoiceToCloud(invPayload, cloudUuid, mappedCustUuid);
+          if (res.success && res.invoice) {
+            invoiceCloudMap[inv.id] = res.invoice.id;
+            invoiceCloudMap[res.invoice.id] = inv.id;
+            syncedInvoices++;
+          }
         }
       }
 
@@ -1580,6 +1603,9 @@
       state.productCloudMap = productCloudMap;
       state.supplierCloudMap = supplierCloudMap;
       state.transactionCloudMap = transactionCloudMap;
+      state.expenseCloudMap = expenseCloudMap;
+      state.posBillCloudMap = posBillCloudMap;
+      state.invoiceCloudMap = invoiceCloudMap;
 
       return {
         success: true,
