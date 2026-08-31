@@ -743,6 +743,99 @@
       }
     }
 
+    // 11. Employee & RBAC Cloud Sync Methods
+    async syncEmployeeToCloud(empPayload, cloudUuid = null) {
+      if (!this.client) return { success: false, error: 'Offline mode' };
+      try {
+        let role = (empPayload.role || 'Salesman');
+        let cloudRole = role.toUpperCase();
+        if (!['OWNER', 'MANAGER', 'ACCOUNTANT', 'CASHIER'].includes(cloudRole)) {
+          cloudRole = 'CASHIER';
+        }
+
+        const payload = {
+          name: empPayload.name,
+          phone: empPayload.phone || null,
+          role: cloudRole,
+          sales: Math.round((parseFloat(empPayload.sales) || 0) * 100) / 100,
+          collections: Math.round((parseFloat(empPayload.collections) || 0) * 100) / 100,
+          is_active: empPayload.active !== false && !empPayload.isDeleted
+        };
+
+        const targetBusinessId = await this.resolveBusinessUuid(empPayload.business_id || empPayload.businessId);
+        if (targetBusinessId) {
+          payload.business_id = targetBusinessId;
+        }
+
+        let response;
+        if (cloudUuid && cloudUuid.length === 36 && cloudUuid.includes('-')) {
+          response = await this.client
+            .from('employees')
+            .update(payload)
+            .eq('id', cloudUuid)
+            .select()
+            .single();
+        } else {
+          // Check if employee with same phone or name already exists in cloud for this business
+          let existingRes = null;
+          if (empPayload.phone) {
+            existingRes = await this.client
+              .from('employees')
+              .select('id')
+              .eq('business_id', targetBusinessId)
+              .eq('phone', empPayload.phone)
+              .maybeSingle();
+          }
+          if (!existingRes || !existingRes.data) {
+            existingRes = await this.client
+              .from('employees')
+              .select('id')
+              .eq('business_id', targetBusinessId)
+              .eq('name', empPayload.name)
+              .maybeSingle();
+          }
+
+          if (existingRes && existingRes.data && existingRes.data.id) {
+            response = await this.client
+              .from('employees')
+              .update(payload)
+              .eq('id', existingRes.data.id)
+              .select()
+              .single();
+          } else {
+            response = await this.client
+              .from('employees')
+              .insert(payload)
+              .select()
+              .single();
+          }
+        }
+
+        if (response.error) {
+          return { success: false, error: this.normalizeError(response.error) };
+        }
+        return { success: true, employee: response.data };
+      } catch (err) {
+        return { success: false, error: this.normalizeError(err) };
+      }
+    }
+
+    async fetchEmployeesFromCloud(businessId) {
+      if (!this.client || !businessId) return { employees: [], error: 'Offline mode or missing businessId' };
+      try {
+        const { data, error } = await this.client
+          .from('employees')
+          .select('*')
+          .eq('business_id', businessId)
+          .order('created_at', { ascending: false });
+
+        if (error) return { employees: [], error: this.normalizeError(error) };
+        return { employees: data || [], error: null };
+      } catch (err) {
+        return { employees: [], error: this.normalizeError(err) };
+      }
+    }
+
     async syncPurchaseToCloud(purchasePayload, cloudUuid = null, mappedSupplierId = null) {
       if (!this.client) return { success: false, error: 'Offline mode' };
       try {
@@ -1599,6 +1692,24 @@
         }
       }
 
+      // 8. Employees
+      const employeeCloudMap = state.employeeCloudMap || {};
+      let syncedEmployees = 0;
+      if (Array.isArray(state.employees)) {
+        const validEmps = state.employees.filter(isStoreActiveRecord);
+        for (const emp of validEmps) {
+          const empPayload = { ...emp, business_id: bizUuid };
+          delete empPayload.businessId;
+          const cloudUuid = employeeCloudMap[emp.id];
+          const res = await this.syncEmployeeToCloud(empPayload, cloudUuid);
+          if (res.success && res.employee) {
+            employeeCloudMap[emp.id] = res.employee.id;
+            employeeCloudMap[res.employee.id] = emp.id;
+            syncedEmployees++;
+          }
+        }
+      }
+
       state.customerCloudMap = customerCloudMap;
       state.productCloudMap = productCloudMap;
       state.supplierCloudMap = supplierCloudMap;
@@ -1606,6 +1717,7 @@
       state.expenseCloudMap = expenseCloudMap;
       state.posBillCloudMap = posBillCloudMap;
       state.invoiceCloudMap = invoiceCloudMap;
+      state.employeeCloudMap = employeeCloudMap;
 
       return {
         success: true,
@@ -1617,7 +1729,8 @@
           transactions: syncedTransactions,
           expenses: syncedExpenses,
           bills: syncedBills,
-          invoices: syncedInvoices
+          invoices: syncedInvoices,
+          employees: syncedEmployees
         }
       };
     }
@@ -1665,7 +1778,7 @@
       }
       try {
         const [
-          custRes, txRes, prodRes, supRes, expRes, billsRes, invRes, purRes
+          custRes, txRes, prodRes, supRes, expRes, billsRes, invRes, purRes, empRes
         ] = await Promise.all([
           this.fetchCustomersFromCloud(businessId),
           this.fetchTransactionsFromCloud(businessId),
@@ -1674,7 +1787,8 @@
           this.fetchExpensesFromCloud(businessId),
           this.fetchPosBillsFromCloud(businessId),
           this.fetchInvoicesFromCloud(businessId),
-          this.fetchPurchasesFromCloud(businessId)
+          this.fetchPurchasesFromCloud(businessId),
+          this.fetchEmployeesFromCloud(businessId)
         ]);
 
         return {
@@ -1687,7 +1801,8 @@
           expenses: expRes.expenses || [],
           bills: billsRes.bills || [],
           invoices: invRes.invoices || [],
-          purchases: purRes.purchases || []
+          purchases: purRes.purchases || [],
+          employees: empRes.employees || []
         };
       } catch (err) {
         return { success: false, error: this.normalizeError(err) };

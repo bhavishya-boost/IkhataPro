@@ -142,18 +142,93 @@
         });
       }
 
-      // Merge suppliers
+      // Merge suppliers cleanly (with Phone & Name Deduplication)
       if (cloud.suppliers && cloud.suppliers.length > 0) {
-        const localSupIds = new Set(this.state.suppliers.map(s => s.id));
+        if (!this.state.supplierCloudMap) this.state.supplierCloudMap = {};
         cloud.suppliers.forEach(cs => {
-          if (!localSupIds.has(cs.id)) {
+          const csPhone = cs.phone ? String(cs.phone).replace(/\D/g, '') : '';
+          const csName = cs.name ? cs.name.trim().toLowerCase() : '';
+
+          const existing = this.state.suppliers.find(s => {
+            const mappedUuid = this.state.supplierCloudMap[s.id];
+            if (s.id === cs.id || mappedUuid === cs.id) return true;
+            const sPhone = s.phone ? String(s.phone).replace(/\D/g, '') : '';
+            const sName = s.name ? s.name.trim().toLowerCase() : '';
+            if (csPhone && sPhone && csPhone === sPhone) return true;
+            if (csName && sName && csName === sName) return true;
+            return false;
+          });
+
+          if (existing) {
+            this.state.supplierCloudMap[existing.id] = cs.id;
+            this.state.supplierCloudMap[cs.id] = existing.id;
+            if (cs.name) existing.name = cs.name;
+            if (cs.phone) existing.phone = cs.phone;
+            if (cs.balance !== undefined) existing.balance = parseFloat(cs.balance) || 0;
+            if (cs.is_deleted !== undefined) existing.isDeleted = Boolean(cs.is_deleted);
+          } else {
+            this.state.supplierCloudMap[cs.id] = cs.id;
             this.state.suppliers.push({
-              id: cs.id, name: cs.name, businessName: cs.business_name || '',
-              phone: cs.phone || '', email: cs.email || '', address: cs.address || '',
+              id: cs.id,
+              name: cs.name,
+              businessName: cs.business_name || '',
+              phone: cs.phone || '',
+              email: cs.email || '',
+              address: cs.address || '',
               category: cs.category || 'General Supplier',
               balance: parseFloat(cs.balance) || 0,
-              businessId: bizId, business_id: bizId, active: cs.is_active !== false,
+              businessId: bizId,
+              business_id: bizId,
+              active: cs.is_active !== false,
               isDeleted: cs.is_deleted || false
+            });
+            changed = true;
+          }
+        });
+      }
+
+      // Merge employees (with Phone & Name Deduplication)
+      if (cloud.employees && cloud.employees.length > 0) {
+        if (!this.state.employeeCloudMap) this.state.employeeCloudMap = {};
+        cloud.employees.forEach(ce => {
+          const cePhone = ce.phone ? String(ce.phone).replace(/\D/g, '') : '';
+          const ceName = ce.name ? ce.name.trim().toLowerCase() : '';
+
+          const existing = this.state.employees.find(e => {
+            const mappedUuid = this.state.employeeCloudMap[e.id];
+            if (e.id === ce.id || mappedUuid === ce.id) return true;
+            const ePhone = e.phone ? String(e.phone).replace(/\D/g, '') : '';
+            const eName = e.name ? e.name.trim().toLowerCase() : '';
+            if (cePhone && ePhone && cePhone === ePhone) return true;
+            if (ceName && eName && ceName === eName) return true;
+            return false;
+          });
+
+          let role = ce.role || 'Salesman';
+          if (role === 'MANAGER') role = 'Manager';
+          else if (role === 'OWNER') role = 'Owner';
+          else if (role === 'ACCOUNTANT') role = 'Accountant';
+          else if (role === 'CASHIER') role = 'Salesman';
+
+          if (existing) {
+            this.state.employeeCloudMap[existing.id] = ce.id;
+            this.state.employeeCloudMap[ce.id] = existing.id;
+            if (ce.name) existing.name = ce.name;
+            if (ce.phone) existing.phone = ce.phone;
+            if (role) existing.role = role;
+            if (ce.sales !== undefined) existing.sales = parseFloat(ce.sales) || 0;
+            if (ce.collections !== undefined) existing.collections = parseFloat(ce.collections) || 0;
+          } else {
+            this.state.employeeCloudMap[ce.id] = ce.id;
+            this.state.employees.push({
+              id: ce.id,
+              name: ce.name,
+              phone: ce.phone || '',
+              role: role,
+              sales: parseFloat(ce.sales) || 0,
+              collections: parseFloat(ce.collections) || 0,
+              business_id: bizId,
+              isDeleted: ce.is_active === false
             });
             changed = true;
           }
@@ -657,7 +732,22 @@
 
     getSuppliers(includeDeleted = false) {
       if (!this.state.suppliers) this.state.suppliers = [];
-      return this.state.suppliers.filter(s => this.isRecordForActiveBusiness(s) && (includeDeleted || !s.isDeleted));
+      const sups = this.state.suppliers.filter(s => this.isRecordForActiveBusiness(s) && (includeDeleted || !s.isDeleted));
+      const seen = new Set();
+      const deduped = [];
+      for (const s of sups) {
+        const phoneKey = s.phone ? String(s.phone).replace(/\D/g, '') : '';
+        const nameKey = s.name ? s.name.toLowerCase().trim() : '';
+        const key = phoneKey ? ('phone:' + phoneKey) : ('name:' + nameKey);
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          deduped.push(s);
+        } else if (!key && s.id && !seen.has(s.id)) {
+          seen.add(s.id);
+          deduped.push(s);
+        }
+      }
+      return deduped;
     }
 
     getPurchases(includeDeleted = false) {
@@ -706,6 +796,16 @@
         if (empData.sales !== undefined) existing.sales = empData.sales;
         if (empData.collections !== undefined) existing.collections = empData.collections;
         this.saveState();
+        if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+          const cloudUuid = (this.state.employeeCloudMap && existing.id) ? this.state.employeeCloudMap[existing.id] : null;
+          window.iKhataSupabase.syncEmployeeToCloud(existing, cloudUuid).then(res => {
+            if (res && res.success && res.employee) {
+              if (!this.state.employeeCloudMap) this.state.employeeCloudMap = {};
+              this.state.employeeCloudMap[existing.id] = res.employee.id;
+              this.state.employeeCloudMap[res.employee.id] = existing.id;
+            }
+          }).catch(err => console.warn('Employee background cloud sync warning:', err.message));
+        }
         return existing;
       }
 
@@ -722,6 +822,18 @@
       };
       this.state.employees.push(newEmp);
       this.saveState(); // saveState() already calls notify() internally
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        const cloudUuid = (this.state.employeeCloudMap && newEmp.id) ? this.state.employeeCloudMap[newEmp.id] : null;
+        window.iKhataSupabase.syncEmployeeToCloud(newEmp, cloudUuid).then(res => {
+          if (res && res.success && res.employee) {
+            if (!this.state.employeeCloudMap) this.state.employeeCloudMap = {};
+            this.state.employeeCloudMap[newEmp.id] = res.employee.id;
+            this.state.employeeCloudMap[res.employee.id] = newEmp.id;
+          }
+        }).catch(err => console.warn('Employee background cloud sync warning:', err.message));
+      }
+
       return newEmp;
     }
 
