@@ -8,13 +8,24 @@ window.iKhataPOS = {
   searchQuery: '',
 
   addToCart(product) {
+    if (!product) return;
     const existing = this.cart.find(item => item.id === product.id);
     if (existing) {
       existing.qty++;
     } else {
       this.cart.push({ ...product, qty: 1 });
     }
-    window.iKhataUI.refresh();
+    if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+      window.iKhataUI.refresh();
+    }
+  },
+
+  addToCartById(productId) {
+    const products = window.iKhataStore.getProducts() || [];
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      this.addToCart(product);
+    }
   },
 
   updateQty(productId, delta) {
@@ -214,7 +225,7 @@ window.iKhataPOS = {
 
           <div class="pos-products-grid">
             ${filteredProds.map(p => `
-              <div class="pos-product-card" onclick="window.iKhataPOS.addToCart(${JSON.stringify(p).replace(/"/g, '&quot;')})">
+              <div class="pos-product-card" onclick="window.iKhataPOS.addToCartById('${p.id}')">
                 <div style="font-weight: 700; font-size: 0.9rem;">${p.name}</div>
                 <div style="font-size: 0.75rem; color: var(--text-muted);">${p.sku} • Stock: ${p.stock}</div>
                 <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: var(--primary); margin-top: 4px;">

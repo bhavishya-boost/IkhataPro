@@ -164,19 +164,9 @@ window.iKhataEmployees = {
       if (!window.iKhataStore.state.employees) window.iKhataStore.state.employees = [];
       window.iKhataStore.state.employees.push(newEmp);
       window.iKhataStore.saveState();
-      window.iKhataStore.notify();
     }
 
     window.iKhataUI.closeModal();
-    window.iKhataUI.showToast(`✅ ${name} ko add kar diya gaya!`, 'success');
-
-    if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
-      window.iKhataUI.refresh();
-    } else if (window.iKhataApp && typeof window.iKhataApp.navigate === 'function') {
-      window.iKhataApp.navigate('employees');
-    } else {
-      const main = document.getElementById('main-content');
-      if (main) main.innerHTML = window.iKhataEmployees.render(window.iKhataStore?.state || {});
-    }
+    window.iKhataUI.showToast(`✅ ${name} saved successfully!`, 'success');
   }
 };

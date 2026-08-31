@@ -52,11 +52,28 @@ async function runTests() {
   assert(emp.role === 'Manager', `Role must be Manager, got ${emp.role}`);
 
   // 2. Verify getEmployees()
-  console.log('\nTEST 2: Verify getEmployees() includes Ayushi Soni');
-  const employees = store.getEmployees();
-  const found = employees.find(e => e.phone === '8955004349');
-  assert(found !== undefined, 'getEmployees() must contain newly added employee');
-  assert(found && found.name === 'Ayushi Soni', `Name in getEmployees must match Ayushi Soni, got ${found ? found.name : null}`);
+  // 3. Add duplicate employee "Ayushi Soni" with same phone
+  console.log('\nTEST 3: Add duplicate Employee "Ayushi Soni" multiple times');
+  store.addEmployee({ name: 'Ayushi Soni', phone: '8955004349', role: 'Manager' });
+  store.addEmployee({ name: 'Ayushi Soni', phone: '8955004349', role: 'Manager' });
+  store.addEmployee({ name: 'Ayushi Soni', phone: '8955004349', role: 'Manager' });
+
+  const empsAfterDup = store.getEmployees();
+  const ayushiCount = empsAfterDup.filter(e => e.phone === '8955004349' || e.name === 'Ayushi Soni').length;
+  assert(ayushiCount === 1, `getEmployees() must return exactly 1 entry for Ayushi Soni, got ${ayushiCount}`);
+
+  // 4. Test loadState deduplication for legacy duplicate state
+  console.log('\nTEST 4: Test loadState() deduplication on duplicate state in localStorage');
+  const rawState = store.loadState();
+  // Manually insert legacy duplicates with different IDs
+  rawState.employees.push({ id: 'emp_111', business_id: 'BUS_LJS', name: 'Ayushi Soni', phone: '8955004349', role: 'Manager' });
+  rawState.employees.push({ id: 'emp_222', business_id: 'BUS_LJS', name: 'Ayushi Soni', phone: '8955004349', role: 'Manager' });
+  store.state = rawState;
+  
+  // Trigger loadState
+  const cleanedState = store.loadState();
+  const cleanedAyushiCount = cleanedState.employees.filter(e => e.phone === '8955004349').length;
+  assert(cleanedAyushiCount === 1, `loadState() must clean up duplicates down to 1 entry, got ${cleanedAyushiCount}`);
 
   console.log('\n═══════════════════════════════════════════════════════════════');
   console.log(`📊 EMPLOYEE CREATION TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);

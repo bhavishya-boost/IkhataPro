@@ -433,18 +433,26 @@
             purchases: [],
             employees: [],
             auditLogs: [],
-            notifications: []
+            notifications: [],
+            onlineOrders: []
           };
         }
       }
       if (state && Array.isArray(state.employees)) {
         // Remove old hardcoded demo employees
-        state.employees = state.employees.filter(e => e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
-        // Deduplicate by ID — fixes any duplicates stored from the double-notify bug
-        const seenEmpIds = new Set();
+        state.employees = state.employees.filter(e => e && e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
+        // Deduplicate employees in state permanently by business_id + (phone || name || id)
+        const seenEmpKeys = new Set();
         state.employees = state.employees.filter(e => {
-          if (!e.id || seenEmpIds.has(e.id)) return false;
-          seenEmpIds.add(e.id);
+          if (!e || e.isDeleted) return false;
+          const bId = e.business_id || 'BUS_LJS';
+          const cleanPhone = e.phone ? String(e.phone).replace(/\D/g, '') : '';
+          const cleanName = e.name ? e.name.toLowerCase().trim() : '';
+          const key = bId + '_' + (cleanPhone ? ('phone:' + cleanPhone) : ('name:' + cleanName));
+          if (key && seenEmpKeys.has(key)) {
+            return false;
+          }
+          seenEmpKeys.add(key);
           return true;
         });
       }
@@ -659,17 +667,53 @@
 
     getEmployees() {
       if (!this.state.employees) this.state.employees = [];
-      return this.state.employees.filter(emp => this.isRecordForActiveBusiness(emp) && !emp.isDeleted);
+      const emps = this.state.employees.filter(emp => this.isRecordForActiveBusiness(emp) && !emp.isDeleted);
+      const seen = new Set();
+      const deduped = [];
+      for (const emp of emps) {
+        const phoneKey = emp.phone ? String(emp.phone).replace(/\D/g, '') : '';
+        const nameKey = emp.name ? emp.name.toLowerCase().trim() : '';
+        const key = phoneKey ? ('phone:' + phoneKey) : ('name:' + nameKey);
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          deduped.push(emp);
+        } else if (!key && emp.id && !seen.has(emp.id)) {
+          seen.add(emp.id);
+          deduped.push(emp);
+        }
+      }
+      return deduped;
     }
 
     addEmployee(empData) {
       const bId = this.getActiveBusinessId();
       if (!this.state.employees) this.state.employees = [];
+
+      const cleanPhone = empData.phone ? String(empData.phone).replace(/\D/g, '') : '';
+      const cleanName = empData.name ? empData.name.trim() : '';
+
+      // Check if employee with same phone or name already exists for this active business
+      const existing = this.state.employees.find(e => 
+        this.isRecordForActiveBusiness(e) && !e.isDeleted &&
+        ((cleanPhone && String(e.phone || '').replace(/\D/g, '') === cleanPhone) ||
+         (cleanName && e.name && e.name.toLowerCase().trim() === cleanName.toLowerCase()))
+      );
+
+      if (existing) {
+        if (cleanName) existing.name = cleanName;
+        if (cleanPhone) existing.phone = cleanPhone;
+        if (empData.role) existing.role = empData.role;
+        if (empData.sales !== undefined) existing.sales = empData.sales;
+        if (empData.collections !== undefined) existing.collections = empData.collections;
+        this.saveState();
+        return existing;
+      }
+
       const newEmp = {
         id: 'emp_' + Date.now(),
         business_id: bId,
-        name: empData.name,
-        phone: empData.phone,
+        name: cleanName,
+        phone: cleanPhone,
         role: empData.role || 'Salesman',
         sales: empData.sales || 0,
         collections: empData.collections || 0,
@@ -3164,6 +3208,24 @@
 
     getCustomerBills(customerId) {
       return this.getBills().filter(b => b.customerId === customerId);
+    }
+
+    getOnlineOrders() {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.onlineOrders) this.state.onlineOrders = [];
+      return this.state.onlineOrders.filter(o => this.isRecordForActiveBusiness(o) && !o.isDeleted);
+    }
+
+    updateOrderStatus(orderId, status) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.onlineOrders) this.state.onlineOrders = [];
+      const order = this.state.onlineOrders.find(o => o.id === orderId && this.isRecordForActiveBusiness(o));
+      if (order) {
+        order.status = status;
+        this.saveState();
+        return true;
+      }
+      return false;
     }
   }
 
