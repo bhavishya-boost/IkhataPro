@@ -438,7 +438,15 @@
         }
       }
       if (state && Array.isArray(state.employees)) {
+        // Remove old hardcoded demo employees
         state.employees = state.employees.filter(e => e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
+        // Deduplicate by ID — fixes any duplicates stored from the double-notify bug
+        const seenEmpIds = new Set();
+        state.employees = state.employees.filter(e => {
+          if (!e.id || seenEmpIds.has(e.id)) return false;
+          seenEmpIds.add(e.id);
+          return true;
+        });
       }
       return state;
     }
@@ -669,8 +677,7 @@
         createdAt: new Date().toISOString()
       };
       this.state.employees.push(newEmp);
-      this.saveState();
-      this.notify();
+      this.saveState(); // saveState() already calls notify() internally
       return newEmp;
     }
 
@@ -1410,10 +1417,7 @@
       });
     }
 
-    getEmployees() {
-      const bId = this.getActiveBusinessId();
-      return this.state.employees.filter(emp => emp.business_id === bId);
-    }
+    // Note: getEmployees() is defined earlier in this file (line ~652) — do not redefine here.
 
     // Session & Workspace Authentication (Dual-Auth Bridge)
     async login(username, password, workspaceSlug = null) {
