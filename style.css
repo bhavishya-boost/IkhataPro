@@ -1,0 +1,33 @@
+@import url('css/main.css');
+@import url('css/components.css');
+@import url('css/khata.css');
+@import url('css/onboarding.css');
+@import url('css/features.css');
+
+/* ── iKhataPro Root Style Entry ────────────────────────────────────────────── */
+
+.otp-input-field {
+  letter-spacing: 6px !important;
+  font-weight: 800 !important;
+  font-size: 1.4rem !important;
+  text-align: center !important;
+}
+
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.btn-disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}

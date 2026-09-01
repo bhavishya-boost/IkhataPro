@@ -120,11 +120,11 @@ window.iKhataOnboarding = {
         window.confirmationResult = confirmationResult;
         window.iKhataUI.showToast(`📩 OTP sent to ${formattedPhone} via SMS!`, 'success');
       } else {
-        window.iKhataUI.showToast(`📩 OTP sent to ${formattedPhone}! (Demo Mode: Use 123456)`, 'info');
+        window.iKhataUI.showToast(`📩 OTP sent to ${formattedPhone}!`, 'info');
       }
     } catch (err) {
       console.warn('Firebase signInWithPhoneNumber notice:', err.message);
-      window.iKhataUI.showToast(`📩 SMS OTP dispatched to ${formattedPhone}! (Use OTP: 123456)`, 'info');
+      window.iKhataUI.showToast(`📩 SMS OTP dispatched to ${formattedPhone}!`, 'info');
     }
 
     this.formData.otpSent = true;
@@ -645,7 +645,7 @@ window.iKhataOnboarding = {
         <div class="form-group" style="margin-top: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label class="form-label" style="font-weight: 700; margin: 0;">Email Address <span class="required-asterisk" style="color: red;">*</span></label>
-            ${this.formData.isEmailVerified ? '<span style="background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 800;">Email Verified ✓</span>' : ''}
+            ${this.formData.isEmailVerified ? '<span class="verified-badge">Email Verified ✓</span>' : ''}
           </div>
           <div class="select-with-btn-group">
             <div class="input-with-icon" style="flex: 1;">
@@ -653,8 +653,8 @@ window.iKhataOnboarding = {
               <input type="email" id="onboarding-email" class="form-input" placeholder="rajesh@example.com" value="${this.formData.email}" oninput="window.iKhataOnboarding.updateField('email', this.value);" ${this.formData.isEmailVerified || this.formData.emailOtpSent ? 'readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed;"' : ''} required>
             </div>
             ${!this.formData.isEmailVerified ? `
-              <button type="button" class="btn btn-secondary btn-quick-add" id="btn-send-email-otp" onclick="window.iKhataOnboarding.sendEmailOTP()" ${this.formData.emailOtpTimer > 0 ? 'disabled' : ''}>
-                ${this.formData.emailOtpSent ? (this.formData.emailOtpTimer > 0 ? `Resend (${this.formData.emailOtpTimer}s)` : 'Resend OTP') : 'Send OTP'}
+              <button type="button" class="btn btn-secondary btn-quick-add" id="btn-send-email-otp" onclick="window.iKhataOnboarding.sendEmailOTP()" ${this.formData.emailOtpTimer > 0 || this.formData.emailOtpSent ? 'disabled' : ''}>
+                ${this.formData.emailOtpSent ? (this.formData.emailOtpTimer > 0 ? `Resend (${this.formData.emailOtpTimer}s)` : 'Resend Code') : 'Send Verification Code'}
               </button>
             ` : ''}
           </div>
@@ -664,11 +664,11 @@ window.iKhataOnboarding = {
           <div class="form-group" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.3); padding: 14px; border-radius: var(--radius-md, 8px); margin-top: 10px;">
             <label class="form-label" style="font-weight: 700; margin-bottom: 6px; display: block;">Enter 6-Digit Email OTP <span class="required-asterisk" style="color: red;">*</span></label>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <input type="text" id="onboarding-email-otp-code" class="form-input" placeholder="123456" maxlength="6" style="letter-spacing: 2px; font-weight: 800; font-size: 1.1rem; text-align: center; max-width: 160px;" value="${this.formData.emailOtpCode || ''}" oninput="window.iKhataOnboarding.formData.emailOtpCode = this.value.replace(/\\D/g,'');">
+              <input type="text" id="onboarding-email-otp-code" class="form-input otp-input-field" placeholder="123456" maxlength="6" style="letter-spacing: 4px; font-weight: 800; font-size: 1.2rem; text-align: center; max-width: 170px;" value="${this.formData.emailOtpCode || ''}" oninput="window.iKhataOnboarding.formData.emailOtpCode = this.value.replace(/\\D/g,'');">
               <button type="button" class="btn btn-primary" id="btn-verify-email-otp" style="font-weight: 700;" onclick="window.iKhataOnboarding.verifyEmailOTP()">Verify OTP</button>
             </div>
             <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">
-              ${this.formData.emailOtpTimer > 0 ? `⏱️ Resend OTP in <strong id="email-otp-countdown-text">${this.formData.emailOtpTimer}s</strong>` : 'Didn\'t receive OTP? Click Resend OTP above.'}
+              ${this.formData.emailOtpTimer > 0 ? `⏱️ Resend code in <strong id="email-otp-countdown-text">${this.formData.emailOtpTimer}s</strong>` : 'Didn\'t receive OTP? Click Resend Code above.'}
             </div>
           </div>
         ` : ''}
@@ -827,13 +827,13 @@ window.iKhataOnboarding = {
                   <button class="btn btn-outline" style="border-radius: var(--radius-lg);" onclick="window.iKhataOnboarding.prevStep()">← Back</button>
                 ` : `<div></div>`}
 
-                ${this.currentStep === 2 && !this.formData.isEmailVerified ? `
-                  <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem; position: relative;" onclick="window.iKhataOnboarding.nextStep()">
-                    Continue → <span style="font-size: 0.8rem; margin-left: 4px; opacity: 0.75;">🔒</span>
+                ${this.currentStep === 5 ? `
+                  <button class="btn btn-primary btn-lg ${!this.formData.isEmailVerified ? 'btn-disabled' : ''}" id="btn-register-account" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem;" onclick="window.iKhataOnboarding.nextStep()" ${!this.formData.isEmailVerified ? 'disabled' : ''}>
+                    Register Account 🎉
                   </button>
                 ` : `
-                  <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem; ${this.currentStep === 5 && !this.formData.isEmailVerified ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="window.iKhataOnboarding.nextStep()" ${this.currentStep === 5 && !this.formData.isEmailVerified ? 'disabled title="Please verify your Email first on Step 2"' : ''}>
-                    ${this.currentStep === 5 ? (this.formData.isEmailVerified ? 'Create My iKhataPro 🎉' : '🔒 Verify Email First') : 'Continue →'}
+                  <button class="btn btn-primary btn-lg" style="border-radius: var(--radius-lg); font-weight: 800; font-size: 1rem;" onclick="window.iKhataOnboarding.nextStep()">
+                    Continue →
                   </button>
                 `}
               </div>

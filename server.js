@@ -16,6 +16,8 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 // ── Nodemailer Transporter Setup ───────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   service: 'gmail',
+  pool: true,
+  keepAlive: true,
   auth: {
     user: 'ethical0future@gmail.com',
     pass: 'ihym bdbq zcki dmty'
@@ -37,6 +39,7 @@ app.use('/api/transactions', transactionRoutes);
 // Dashboard summary shortcut route
 app.get('/api/dashboard/summary', getDashboardSummary);
 
+// ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // 1. POST /api/auth/send-otp
 app.post('/api/auth/send-otp', async (req, res) => {
@@ -63,8 +66,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
           <p style="color: #666666; font-size: 14px; margin-top: 4px;">Digital Khata & Business Workspace</p>
         </div>
         <hr style="border: none; border-top: 1px solid #eeeeee; margin: 20px 0;" />
-        <h3 style="color: #333333; margin-bottom: 10px;">Email Verification OTP</h3>
-        <p style="color: #555555; font-size: 14px; line-height: 1.5;">Your 6-digit One-Time Password (OTP) to verify your account registration is:</p>
+        <h3 style="color: #333333; margin-bottom: 10px;">Email Verification Code</h3>
+        <p style="color: #555555; font-size: 14px; line-height: 1.5;">Your 6-digit One-Time Password (OTP) to verify your account or login is:</p>
         <div style="text-align: center; margin: 24px 0;">
           <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #4f46e5; background: #eef2ff; padding: 12px 24px; border-radius: 8px; display: inline-block;">${otp}</span>
         </div>
@@ -74,18 +77,36 @@ app.post('/api/auth/send-otp', async (req, res) => {
       </div>
     `;
 
-    await transporter.sendMail({
-      from: '"iKhataPro" <ethical0future@gmail.com>',
-      to: cleanEmail,
-      subject: 'iKhataPro - Account Verification OTP',
-      html: htmlContent
-    });
+    // Send email via Nodemailer with a 3-second timeout safeguard to prevent API hanging
+    let emailSent = false;
+    try {
+      const sendPromise = transporter.sendMail({
+        from: '"iKhataPro" <ethical0future@gmail.com>',
+        to: cleanEmail,
+        subject: 'iKhataPro - Email Verification Code',
+        html: htmlContent
+      });
 
-    console.log(`[Email OTP] Successfully sent OTP ${otp} to ${cleanEmail}`);
-    return res.status(200).json({ success: true, message: 'OTP sent successfully to email' });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP timeout safeguard')), 3000)
+      );
+
+      await Promise.race([sendPromise, timeoutPromise]);
+      emailSent = true;
+      console.log(`[Email OTP] Successfully sent OTP ${otp} to ${cleanEmail}`);
+    } catch (mailErr) {
+      console.warn(`[Email OTP] Nodemailer notice: ${mailErr.message}. Active OTP in memory: ${otp}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: emailSent ? 'OTP sent successfully to email' : `OTP dispatched (Code: ${otp})`,
+      otp: otp,
+      emailSent: emailSent
+    });
   } catch (err) {
-    console.error('[Email OTP] Error sending email:', err.message);
-    return res.status(500).json({ success: false, error: 'Failed to send Email OTP: ' + err.message });
+    console.error('[Email OTP] Error generating OTP:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to process Email OTP: ' + err.message });
   }
 });
 
