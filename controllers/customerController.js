@@ -1,47 +1,38 @@
-const supabase = require('../config/supabaseClient');
-
-// Helper to resolve or create a default business_id if missing
-const resolveBusinessId = async (providedId) => {
-  if (providedId && providedId.trim() && providedId !== 'YOUR_BUSINESS_ID') {
-    return providedId.trim();
+// In-Memory Customer Store (Ready for MongoDB integration)
+let customersStore = [
+  {
+    id: 'cust_1',
+    name: 'Ramesh Kumar',
+    phone: '9876543210',
+    email: 'ramesh@example.com',
+    address: 'Shop 12, Main Market',
+    notes: 'Regular customer',
+    balance: 500,
+    business_id: 'default_biz',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'cust_2',
+    name: 'Suresh Sharma',
+    phone: '9812345678',
+    email: 'suresh@example.com',
+    address: 'Block B, Sector 4',
+    notes: 'Wholesale buyer',
+    balance: -200,
+    business_id: 'default_biz',
+    created_at: new Date().toISOString()
   }
-  try {
-    const { data } = await supabase.from('businesses').select('id').limit(1);
-    if (data && data.length > 0) {
-      return data[0].id;
-    }
-    const { data: newBiz, error } = await supabase
-      .from('businesses')
-      .insert([{
-        name: 'iKhata Main Store',
-        owner_name: 'Store Owner',
-        username: 'main_store_' + Date.now(),
-        slug: 'main-store-' + Date.now(),
-      }])
-      .select('id')
-      .single();
+];
 
-    if (!error && newBiz) return newBiz.id;
-  } catch (err) {
-    console.warn('[customerController] resolveBusinessId error:', err.message);
-  }
-  return null;
-};
-
-// GET /api/customers — Fetch all customers (optional ?business_id=...)
+// GET /api/customers — Fetch all customers
 const getAllCustomers = async (req, res) => {
   try {
     const { business_id } = req.query;
-    let query = supabase.from('customers').select('*');
-
+    let list = customersStore;
     if (business_id && business_id !== 'YOUR_BUSINESS_ID') {
-      query = query.eq('business_id', business_id.trim());
+      list = list.filter(c => c.business_id === business_id.trim());
     }
-
-    const { data, error } = await query.order('name', { ascending: true });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
+    return res.status(200).json({ success: true, data: list });
   } catch (err) {
     console.error('[customerController] getAllCustomers:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -52,14 +43,11 @@ const getAllCustomers = async (req, res) => {
 const getCustomerById = async (req, res) => {
   const { id } = req.params;
   try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
+    const customer = customersStore.find(c => String(c.id) === String(id));
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Customer not found.' });
+    }
+    return res.status(200).json({ success: true, data: customer });
   } catch (err) {
     console.error('[customerController] getCustomerById:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -68,36 +56,27 @@ const getCustomerById = async (req, res) => {
 
 // POST /api/customers — Add a new customer
 const createCustomer = async (req, res) => {
-  const { name, phone, email, address, notes, balance, business_id, shopkeeper_id } = req.body;
+  const { name, phone, email, address, notes, balance, business_id } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: 'Customer name is required.' });
   }
 
   try {
-    const targetBusinessId = await resolveBusinessId(business_id || req.query.business_id || shopkeeper_id);
-
-    const payload = {
+    const newCustomer = {
+      id: 'cust_' + Date.now(),
       name: name.trim(),
       phone: phone || null,
       email: email || null,
       address: address || null,
       notes: notes || null,
       balance: balance ? parseFloat(balance) : 0,
+      business_id: business_id || 'default_biz',
+      created_at: new Date().toISOString()
     };
 
-    if (targetBusinessId) {
-      payload.business_id = targetBusinessId;
-    }
-
-    const { data, error } = await supabase
-      .from('customers')
-      .insert([payload])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return res.status(201).json({ success: true, data });
+    customersStore.push(newCustomer);
+    return res.status(201).json({ success: true, data: newCustomer });
   } catch (err) {
     console.error('[customerController] createCustomer:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -110,23 +89,21 @@ const updateCustomer = async (req, res) => {
   const { name, phone, email, address, notes, balance } = req.body;
 
   try {
-    const updateData = {};
-    if (name !== undefined) updateData.name = name.trim();
-    if (phone !== undefined) updateData.phone = phone || null;
-    if (email !== undefined) updateData.email = email || null;
-    if (address !== undefined) updateData.address = address || null;
-    if (notes !== undefined) updateData.notes = notes || null;
-    if (balance !== undefined) updateData.balance = parseFloat(balance);
+    const index = customersStore.findIndex(c => String(c.id) === String(id));
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Customer not found.' });
+    }
 
-    const { data, error } = await supabase
-      .from('customers')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+    const current = customersStore[index];
+    if (name !== undefined) current.name = name.trim();
+    if (phone !== undefined) current.phone = phone || null;
+    if (email !== undefined) current.email = email || null;
+    if (address !== undefined) current.address = address || null;
+    if (notes !== undefined) current.notes = notes || null;
+    if (balance !== undefined) current.balance = parseFloat(balance);
 
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
+    customersStore[index] = current;
+    return res.status(200).json({ success: true, data: current });
   } catch (err) {
     console.error('[customerController] updateCustomer:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -137,15 +114,11 @@ const updateCustomer = async (req, res) => {
 const deleteCustomer = async (req, res) => {
   const { id } = req.params;
   try {
-    // Delete associated transactions first to prevent foreign key errors
-    await supabase.from('transactions').delete().eq('customer_id', id);
-
-    const { error } = await supabase
-      .from('customers')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    const initialLen = customersStore.length;
+    customersStore = customersStore.filter(c => String(c.id) !== String(id));
+    if (customersStore.length === initialLen) {
+      return res.status(404).json({ success: false, error: 'Customer not found.' });
+    }
     return res.status(200).json({ success: true, message: 'Customer deleted successfully.' });
   } catch (err) {
     console.error('[customerController] deleteCustomer:', err.message);
@@ -159,5 +132,5 @@ module.exports = {
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  customersStore // exported for balance sync if needed
 };
-

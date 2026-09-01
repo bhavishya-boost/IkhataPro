@@ -155,8 +155,8 @@
             <span>🤖</span>
           </button>
 
-          <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.syncToCloudUI()" title="Sync all data to Supabase Cloud Database" style="display: inline-flex; align-items: center; gap: 4px;">
-            <span>☁️</span> <span>Sync Cloud</span>
+          <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.showNotification('Local Storage Active (MongoDB coming soon)', 'info')" title="Data saved locally in browser" style="display: inline-flex; align-items: center; gap: 4px;">
+            <span>💾</span> <span>Local Mode</span>
           </button>
 
           <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.logout()">
@@ -301,10 +301,6 @@
   <!-- Firebase SDK for Phone Auth OTP -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-
-  <!-- Supabase Client SDK & iKhataPro Wrapper (Phase 10 Stage 1) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabaseClient.js"></script>
 
 
   <!-- JavaScript Modules -->

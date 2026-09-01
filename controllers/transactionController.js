@@ -1,33 +1,49 @@
-const supabase = require('../config/supabaseClient');
+const { customersStore } = require('./customerController');
 
-// Helper to update customer running balance in customers table
-const syncCustomerBalance = async (customerId) => {
+// In-Memory Transaction Store (Ready for MongoDB integration)
+let transactionsStore = [
+  {
+    id: 'txn_1',
+    customer_id: 'cust_1',
+    customer_name: 'Ramesh Kumar',
+    business_id: 'default_biz',
+    type: 'UDHAR',
+    amount: 500,
+    note: 'Initial balance entry',
+    date: new Date().toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'txn_2',
+    customer_id: 'cust_2',
+    customer_name: 'Suresh Sharma',
+    business_id: 'default_biz',
+    type: 'JAMA',
+    amount: 200,
+    note: 'Advance payment',
+    date: new Date().toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  }
+];
+
+// Helper to update customer running balance in customer memory store
+const syncCustomerBalance = (customerId) => {
   if (!customerId) return;
-  try {
-    const { data: txns, error } = await supabase
-      .from('transactions')
-      .select('type, amount')
-      .eq('customer_id', customerId);
+  const txns = transactionsStore.filter(t => String(t.customer_id) === String(customerId));
+  let balance = 0;
+  txns.forEach((t) => {
+    const typeStr = (t.type || '').toUpperCase();
+    const amt = Number(t.amount) || 0;
+    if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
+      balance += amt;
+    } else if (typeStr === 'JAMA' || typeStr === 'GOT') {
+      balance -= amt;
+    }
+  });
 
-    if (error) return;
-
-    let balance = 0;
-    (txns || []).forEach((t) => {
-      const typeStr = (t.type || '').toUpperCase();
-      const amt = Number(t.amount) || 0;
-      if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
-        balance += amt;
-      } else if (typeStr === 'JAMA' || typeStr === 'GOT') {
-        balance -= amt;
-      }
-    });
-
-    await supabase
-      .from('customers')
-      .update({ balance: Math.round(balance * 100) / 100 })
-      .eq('id', customerId);
-  } catch (err) {
-    console.warn('[transactionController] syncCustomerBalance error:', err.message);
+  const cust = customersStore.find(c => String(c.id) === String(customerId));
+  if (cust) {
+    cust.balance = Math.round(balance * 100) / 100;
   }
 };
 
@@ -35,17 +51,11 @@ const syncCustomerBalance = async (customerId) => {
 const getTransactionsByCustomer = async (req, res) => {
   const { customerId } = req.params;
   try {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-
+    const txns = transactionsStore.filter(t => String(t.customer_id) === String(customerId));
+    
     // Calculate running balance
     let runningBalance = 0;
-    const ledger = (data || []).map((txn) => {
+    const ledger = txns.map((txn) => {
       const typeStr = (txn.type || '').toUpperCase();
       const amt = Number(txn.amount) || 0;
       if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
@@ -88,42 +98,26 @@ const createTransaction = async (req, res) => {
   }
 
   try {
-    // Fetch customer details for customer_name and business_id
-    const { data: customer, error: custError } = await supabase
-      .from('customers')
-      .select('name, business_id')
-      .eq('id', customer_id)
-      .single();
+    const customer = customersStore.find(c => String(c.id) === String(customer_id));
+    const customerName = customer ? customer.name : 'Unknown Customer';
+    const targetBusinessId = business_id || (customer ? customer.business_id : 'default_biz');
 
-    if (custError || !customer) {
-      return res.status(404).json({ success: false, error: 'Customer not found.' });
-    }
-
-    const targetBusinessId = business_id || customer.business_id;
-
-    // Standardize type format (Keep input type or map safely)
-    const payload = {
+    const newTxn = {
+      id: 'txn_' + Date.now(),
       customer_id,
-      customer_name: customer.name,
+      customer_name: customerName,
       business_id: targetBusinessId,
       type: rawType,
       amount: parsedAmount,
       note: note || null,
       date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert([payload])
-      .select()
-      .single();
+    transactionsStore.push(newTxn);
+    syncCustomerBalance(customer_id);
 
-    if (error) throw error;
-
-    // Recalculate and update customer balance asynchronously
-    await syncCustomerBalance(customer_id);
-
-    return res.status(201).json({ success: true, data });
+    return res.status(201).json({ success: true, data: newTxn });
   } catch (err) {
     console.error('[transactionController] createTransaction:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -134,19 +128,14 @@ const createTransaction = async (req, res) => {
 const deleteTransaction = async (req, res) => {
   const { id } = req.params;
   try {
-    // Fetch transaction first to know customer_id for balance re-sync
-    const { data: txn } = await supabase
-      .from('transactions')
-      .select('customer_id')
-      .eq('id', id)
-      .single();
-
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) throw error;
-
-    if (txn && txn.customer_id) {
-      await syncCustomerBalance(txn.customer_id);
+    const txn = transactionsStore.find(t => String(t.id) === String(id));
+    if (!txn) {
+      return res.status(404).json({ success: false, error: 'Transaction not found.' });
     }
+
+    const customerId = txn.customer_id;
+    transactionsStore = transactionsStore.filter(t => String(t.id) !== String(id));
+    syncCustomerBalance(customerId);
 
     return res.status(200).json({ success: true, message: 'Transaction deleted.' });
   } catch (err) {
@@ -159,20 +148,15 @@ const deleteTransaction = async (req, res) => {
 const getDashboardSummary = async (req, res) => {
   try {
     const { business_id } = req.query;
-    let query = supabase.from('transactions').select('type, amount');
-
+    let list = transactionsStore;
     if (business_id && business_id !== 'YOUR_BUSINESS_ID') {
-      query = query.eq('business_id', business_id.trim());
+      list = list.filter(t => t.business_id === business_id.trim());
     }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
 
     let totalUdhar = 0;
     let totalJama = 0;
 
-    (data || []).forEach((txn) => {
+    list.forEach((txn) => {
       const typeStr = (txn.type || '').toUpperCase();
       const amt = Number(txn.amount) || 0;
       if (typeStr === 'UDHAR' || typeStr === 'GAVE') {
@@ -205,4 +189,3 @@ module.exports = {
   deleteTransaction,
   getDashboardSummary,
 };
-

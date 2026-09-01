@@ -14,73 +14,11 @@
     }
 
     initCloudSync() {
-      if (typeof window !== 'undefined') {
-        const triggerSync = async () => {
-          if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
-          const bizId = this.getActiveBusinessId();
-          try {
-            if (bizId && bizId !== 'BUS_LJS' && bizId !== 'BUS_SHARMA') {
-              const bizUuid = await window.iKhataSupabase.resolveBusinessUuid(bizId);
-              if (bizUuid) {
-                await window.iKhataSupabase.purgeCloudDemoDataForBusiness(bizUuid);
-              }
-            }
-            // First pull cloud data so any new data from other laptops is received immediately
-            const pullRes = await window.iKhataSupabase.pullAllCloudDataForBusiness(bizId);
-            if (pullRes && pullRes.success) {
-              this.mergeCloudDataIntoState(pullRes, bizId);
-              this.purgeSampleDemoData();
-            }
-            // Next push any local data to cloud
-            const pushRes = await window.iKhataSupabase.pushFullLocalStateToCloud(this.state);
-            if (pushRes && pushRes.success) {
-              console.log('⚡ [iKhataPro] Startup cloud sync completed:', pushRes.counts);
-            }
-            this.recalculateTotals();
-            this.saveState();
-            this.notify();
-          } catch (err) {
-            console.warn('⚠️ [iKhataPro] Startup cloud sync warning:', err.message);
-          }
-        };
-
-        if (typeof document !== 'undefined' && typeof window.addEventListener === 'function') {
-          if (document.readyState === 'complete') {
-            setTimeout(triggerSync, 1000);
-            setTimeout(() => this.startPeriodicCloudPull(), 3000);
-          } else {
-            window.addEventListener('load', () => {
-              setTimeout(triggerSync, 1000);
-              setTimeout(() => this.startPeriodicCloudPull(), 3000);
-            });
-          }
-        } else {
-          setTimeout(triggerSync, 50);
-        }
-      }
+      // Local Storage Mode Active — No Database Connectivity Required
     }
 
     async syncAllDataToCloud() {
-      if (!window.iKhataSupabase || !window.iKhataSupabase.isOnline) {
-        return { success: false, reason: 'Supabase client is offline.' };
-      }
-      const bizId = this.getActiveBusinessId();
-      try {
-        const pushRes = await window.iKhataSupabase.pushFullLocalStateToCloud(this.state);
-        if (!pushRes || !pushRes.success) {
-          return { success: false, reason: pushRes?.error?.message || pushRes?.error || 'Push to cloud failed.' };
-        }
-        const pullRes = await window.iKhataSupabase.pullAllCloudDataForBusiness(bizId);
-        if (pullRes && pullRes.success) {
-          this.mergeCloudDataIntoState(pullRes, bizId);
-          this.recalculateTotals();
-          this.saveState();
-          this.notify();
-        }
-        return { success: true, pushRes, pullRes, counts: pushRes.counts || {} };
-      } catch (err) {
-        return { success: false, error: err.message };
-      }
+      return { success: true, message: 'Local storage active.' };
     }
 
     mergeCloudDataIntoState(cloud, bizId) {
@@ -454,28 +392,8 @@
       }
     }
 
-    // ── PERIODIC CLOUD PULL: Every 30s, fetch fresh data from Supabase ──
-    // This keeps both devices in sync without needing to re-login
     startPeriodicCloudPull() {
-      if (typeof window === 'undefined') return;
-      this._cloudPullInterval = setInterval(() => {
-        const bizId = this.getActiveBusinessId();
-        if (!bizId || !window.iKhataSupabase || !window.iKhataSupabase.isOnline) return;
-
-        window.iKhataSupabase.pullAllCloudDataForBusiness(bizId)
-          .then(cloud => {
-            if (!cloud || !cloud.success) return;
-            const changed = this.mergeCloudDataIntoState(cloud, bizId);
-            if (changed) {
-              this.purgeSampleDemoData();
-              this.recalculateTotals();
-              this.saveState();
-              this.notify(); // Refresh UI
-              console.log('🔄 [iKhataPro] Periodic sync: new data pulled from cloud');
-            }
-          })
-          .catch(err => console.warn('⚠️ [iKhataPro] Periodic pull warning:', err.message));
-      }, 30000); // Every 30 seconds
+      // Offline Local Storage Mode Active
     }
 
     loadState() {

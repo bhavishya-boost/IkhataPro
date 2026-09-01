@@ -87,7 +87,7 @@ async function loadSummary() {
         : '🔴 Net Dene Hain — You Need to Pay';
     }
   } catch (err) {
-    console.warn('[loadSummary] Supabase not connected or table missing:', err.message);
+    console.warn('[loadSummary] Backend API summary error:', err.message);
     // Show zeroed-out state gracefully
     setText('total-udhar-display', '₹ 0.00');
     setText('total-jama-display',  '₹ 0.00');
