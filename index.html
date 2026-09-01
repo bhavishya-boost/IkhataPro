@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="css/khata.css">
   <link rel="stylesheet" href="css/onboarding.css">
   <link rel="stylesheet" href="css/features.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('ikhata_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
 </head>
 <body>
 
@@ -126,6 +132,10 @@
         </div>
 
         <div class="header-right">
+          <button class="icon-btn" id="theme-toggle-btn" onclick="window.iKhataUI.toggleTheme()" title="Toggle Light / Dark Theme">
+            <span id="theme-toggle-icon">🌙</span>
+          </button>
+
           <button class="icon-btn" onclick="window.iKhataGullak.openGullakModal()" title="Daily Cash Gullak Counter">
             <span>💵</span>
           </button>

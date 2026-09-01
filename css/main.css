@@ -65,6 +65,43 @@
   --transition-normal: 0.25s ease;
 }
 
+[data-theme="dark"] {
+  /* Surface & Neutrals */
+  --bg-main: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-subtle: #334155;
+  --border-color: #334155;
+  --border-focus: #6366f1;
+
+  /* Text */
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-light: #64748b;
+  --text-inverse: #0f172a;
+
+  /* Semantic Light Backgrounds */
+  --primary-light: rgba(79, 70, 229, 0.2);
+  --success-light: rgba(16, 185, 129, 0.15);
+  --success-border: #065f46;
+  
+  --danger-light: rgba(239, 68, 68, 0.15);
+  --danger-border: #991b1b;
+  
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --warning-border: #92400e;
+
+  --info-light: rgba(59, 130, 246, 0.15);
+  --ai-light: rgba(139, 92, 246, 0.2);
+
+  /* Dark Mode Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.35);
+}
+
+
 /* Base Reset */
 *, *::before, *::after {
   box-sizing: border-box;

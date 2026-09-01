@@ -6,6 +6,7 @@ window.iKhataUI = {
   currentCustomerProfileId: null,
 
   init() {
+    this.initTheme();
     window.iKhataStore.subscribe(() => {
       this.refresh();
       this.updateNotificationBadge();
@@ -21,6 +22,36 @@ window.iKhataUI = {
     window.addEventListener('hashchange', () => {
       this.handleURLRouting();
     });
+  },
+
+  initTheme() {
+    const savedTheme = localStorage.getItem('ikhata_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    this.setTheme(savedTheme, false);
+  },
+
+  setTheme(theme, showToastMsg = true) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('ikhata_theme', theme);
+    
+    // Update theme toggle icon in top header
+    const iconEl = document.getElementById('theme-toggle-icon');
+    const btnEl = document.getElementById('theme-toggle-btn');
+    if (iconEl) {
+      iconEl.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    if (btnEl) {
+      btnEl.setAttribute('title', theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme');
+    }
+
+    if (showToastMsg) {
+      this.showToast(theme === 'dark' ? '🌙 Switched to Dark Theme' : '☀️ Switched to Light Theme', 'info');
+    }
+  },
+
+  toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    this.setTheme(newTheme, true);
   },
 
   initNetworkListeners() {
@@ -1413,10 +1444,32 @@ window.iKhataUI = {
         <!-- Modal Tabs Navigation -->
         <div class="tab-list" style="margin-bottom: 20px;">
           <button class="tab-btn ${activeTab === 'PROFILE' ? 'active' : ''}" onclick="window.iKhataUI.openSettingsModal('PROFILE')">🏪 Profile & GST</button>
+          <button class="tab-btn ${activeTab === 'THEME' ? 'active' : ''}" onclick="window.iKhataUI.openSettingsModal('THEME')">🎨 Theme</button>
           <button class="tab-btn ${activeTab === 'RBAC' ? 'active' : ''}" onclick="window.iKhataUI.openSettingsModal('RBAC')">👥 Roles & Security</button>
           <button class="tab-btn ${activeTab === 'BACKUP' ? 'active' : ''}" onclick="window.iKhataUI.openSettingsModal('BACKUP')">💾 Data Safety & Backup</button>
           <button class="tab-btn ${activeTab === 'SUBSCRIPTION' ? 'active' : ''}" onclick="window.iKhataUI.openSettingsModal('SUBSCRIPTION')">💎 Plan (${sub.plan})</button>
         </div>
+
+        ${activeTab === 'THEME' ? `
+          <div>
+            <h4 style="margin-bottom: 8px;">App Appearance & Visual Theme</h4>
+            <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 20px;">Customize your workspace theme. Preference is saved automatically in your browser.</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+              <div class="card" style="cursor: pointer; text-align: center; border: 2px solid ${document.documentElement.getAttribute('data-theme') !== 'dark' ? 'var(--primary)' : 'var(--border-color)'}; border-radius: var(--radius-md); padding: 20px; background: var(--bg-surface);" onclick="window.iKhataUI.setTheme('light'); window.iKhataUI.openSettingsModal('THEME');">
+                <div style="font-size: 2.5rem; margin-bottom: 8px;">☀️</div>
+                <div style="font-weight: 700; font-size: 1.05rem;">Light Mode</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Bright & clean standard view</div>
+              </div>
+
+              <div class="card" style="cursor: pointer; text-align: center; border: 2px solid ${document.documentElement.getAttribute('data-theme') === 'dark' ? 'var(--primary)' : 'var(--border-color)'}; border-radius: var(--radius-md); padding: 20px; background: var(--bg-surface);" onclick="window.iKhataUI.setTheme('dark'); window.iKhataUI.openSettingsModal('THEME');">
+                <div style="font-size: 2.5rem; margin-bottom: 8px;">🌙</div>
+                <div style="font-weight: 700; font-size: 1.05rem;">Dark Mode</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Sleek dark design system for night work</div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
 
         ${activeTab === 'PROFILE' ? `
           <form onsubmit="event.preventDefault(); window.iKhataUI.submitSettingsProfile(this);">
