@@ -729,9 +729,17 @@ window.iKhataUI = {
   },
 
   renderWorkspaceShell() {
-    const store = window.iKhataStore;
-    const currentBus = store.getCurrentBusiness();
-    const state = store.state;
+    const state = window.iKhataStore.state;
+    const currentBus = window.iKhataStore.getCurrentBusiness();
+
+    // Toggle public shop mode shielding class on body
+    if (this.currentRoute === 'customer-store') {
+      document.body.classList.add('public-shop-mode');
+    } else {
+      document.body.classList.remove('public-shop-mode');
+    }
+
+    if (!currentBus) return;
 
     // Update dynamic shop branding elements
     const brandName = document.getElementById('shop-brand-name');

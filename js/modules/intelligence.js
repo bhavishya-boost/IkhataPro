@@ -300,7 +300,7 @@ window.iKhataIntelligence = {
     const cashSales = bills.filter(b => b.date >= filterDate && b.paymentMethod !== 'Credit').reduce((s,b)=>s+(b.grandTotal||0),0);
     const creditCollections = transactions.filter(t => t.date >= filterDate && t.type === 'GOT').reduce((s,t)=>s+(t.amount||0),0);
     const invoiceCollections = invoices.filter(i => i.date >= filterDate && i.status === 'Paid').reduce((s,i)=>s+(i.total||0),0);
-    const totalIn = cashSales + creditCollections;
+    const totalIn = cashSales + creditCollections + invoiceCollections;
 
     // MONEY OUT
     const totalExpenses = expenses.filter(e => e.date >= filterDate).reduce((s,e)=>s+(e.amount||0),0);

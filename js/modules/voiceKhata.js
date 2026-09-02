@@ -123,7 +123,7 @@ window.iKhataVoice = {
           Spoken Command: <em>"${spokenText}"</em>
         </div>
 
-        <div style="border: 2px solid var(--border-focus); border-radius: var(--radius-lg); padding: 20px; background: white; margin-bottom: 20px;">
+        <div style="border: 2px solid var(--border-focus); border-radius: var(--radius-lg); padding: 20px; background: var(--bg-surface); margin-bottom: 20px;">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <div>
               <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">PARSED CUSTOMER</div>

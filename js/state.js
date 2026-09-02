@@ -1375,7 +1375,7 @@
       });
 
       const operatingExpenses = periodExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-      const grossProfit = Math.max(0, netSales - cogs);
+      const grossProfit = netSales - cogs;
       const netProfit = grossProfit - operatingExpenses;
       const grossMarginPct = netSales > 0 ? Math.round((grossProfit / netSales) * 100) : 0;
 
@@ -1399,6 +1399,21 @@
       const bus = this.getCurrentBusiness();
       if (!bus) return;
 
+      const bId = this.getActiveBusinessId();
+
+      // Recalculate each customer's balance dynamically from active (non-deleted) transactions
+      this.getCustomers(true).forEach(c => {
+        if (c.isDeleted) return;
+        const custTx = (this.state.transactions || []).filter(t => t.customerId === c.id && !t.isDeleted);
+        let computed = parseFloat(c.initialBalance) || 0;
+        custTx.forEach(t => {
+          if (t.type === 'GAVE' || t.type === 'UDHAR') computed += (parseFloat(t.amount) || 0);
+          else if (t.type === 'GOT' || t.type === 'JAMA') computed -= (parseFloat(t.amount) || 0);
+        });
+        c.balance = Math.round(computed * 100) / 100;
+        c.type = c.balance > 0 ? 'GET' : (c.balance < 0 ? 'GIVE' : 'SETTLED');
+      });
+
       let getSum = 0;
       let giveSum = 0;
 
@@ -1412,21 +1427,21 @@
         totalSupplierPayable += (s.balance || 0);
       });
 
-      bus.toReceiveTotal = getSum;
-      bus.toGiveTotal = giveSum + totalSupplierPayable;
+      bus.toReceiveTotal = Math.round(getSum * 100) / 100;
+      bus.toGiveTotal = Math.round((giveSum + totalSupplierPayable) * 100) / 100;
 
       const today = new Date().toISOString().split('T')[0];
       const todayBills = this.getBills().filter(b => b.date === today);
       const todayTxReceived = this.getTransactions()
-        .filter(t => t.date === today && t.type === 'GOT')
+        .filter(t => t.date === today && t.type === 'GOT' && !t.isDeleted)
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const billsSales = todayBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
       const todayInvSales = this.getInvoices().filter(i => i.date === today).reduce((sum, i) => sum + (i.total || 0), 0);
       const billsReceived = todayBills.filter(b => b.paymentMethod !== 'Credit').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
 
-      bus.todaySales = (billsSales + todayInvSales) > 0 ? (billsSales + todayInvSales) : (bus.todaySales || 0);
-      bus.todayReceived = (billsReceived + todayTxReceived) > 0 ? (billsReceived + todayTxReceived) : (bus.todayReceived || 0);
+      bus.todaySales = Math.round((billsSales + todayInvSales) * 100) / 100;
+      bus.todayReceived = Math.round((billsReceived + todayTxReceived) * 100) / 100;
 
       this.computeCustomerSegments();
     }

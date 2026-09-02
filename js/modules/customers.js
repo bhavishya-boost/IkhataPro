@@ -35,7 +35,7 @@ window.iKhataCustomers = {
           <div style="color: var(--text-muted); font-size: 0.78rem; margin-top: 2px;">Customer can view their passbook online and pay via UPI (GPay/PhonePe/Paytm)</div>
         </div>
 
-        <div style="border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px; background: white;">
+        <div style="border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 16px; background: var(--bg-surface);">
           <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; font-weight: 700;">
             <span>${customer.name} Passbook</span>
             <span style="color: ${customer.balance > 0 ? 'var(--danger)' : 'var(--success)'};">Due: ₹${customer.balance.toLocaleString('en-IN')}</span>

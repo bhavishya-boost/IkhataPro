@@ -126,7 +126,7 @@ window.iKhataSuppliers = {
         ` : filteredSuppliers.map(s => `
           <div class="card" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px;">
             <div style="display: flex; align-items: center; gap: 14px; cursor: pointer;" onclick="window.iKhataSuppliers.selectedSupplierProfileId = '${s.id}'; window.iKhataUI.refresh();">
-              <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: #f1f5f9; color: var(--primary); font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; justify-content: center;">
+              <div style="width: 48px; height: 48px; border-radius: var(--radius-md); background: var(--bg-subtle); color: var(--primary); font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; justify-content: center;">
                 🏭
               </div>
               <div>

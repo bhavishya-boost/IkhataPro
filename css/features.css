@@ -90,9 +90,9 @@
 
 /* Promise To Pay (PTP) Badges */
 .ptp-badge {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background: var(--warning-light);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
   padding: 4px 10px;
   border-radius: var(--radius-full);
   font-size: 0.78rem;

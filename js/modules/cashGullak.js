@@ -4,12 +4,17 @@ window.iKhataGullak = {
   counts: { 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, coins: 0 },
 
   getSystemCashSales() {
-    const bus = window.iKhataStore.getCurrentBusiness ? window.iKhataStore.getCurrentBusiness() : {};
-    if (bus && typeof bus.todayReceived === 'number') return bus.todayReceived;
-    const allBills = window.iKhataStore.getBills ? window.iKhataStore.getBills() : [];
     const today = new Date().toISOString().split('T')[0];
-    const todayCashBills = allBills.filter(b => b.date === today && (b.paymentMethod === 'Cash' || b.paymentMode === 'Cash'));
-    return todayCashBills.reduce((sum, b) => sum + (b.grandTotal || b.total || 0), 0);
+    const allBills = window.iKhataStore.getBills ? window.iKhataStore.getBills() : [];
+    const allTx = window.iKhataStore.getTransactions ? window.iKhataStore.getTransactions() : [];
+    
+    const todayCashBills = allBills.filter(b => b.date === today && !b.isDeleted && (b.paymentMethod === 'Cash' || b.paymentMode === 'Cash'));
+    const todayCashTx = allTx.filter(t => t.date === today && !t.isDeleted && t.type === 'GOT' && (t.mode === 'Cash' || !t.mode));
+
+    const billCash = todayCashBills.reduce((sum, b) => sum + (b.grandTotal || b.total || 0), 0);
+    const txCash = todayCashTx.reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    return Math.round((billCash + txCash) * 100) / 100;
   },
 
   updateCount(denom, val) {

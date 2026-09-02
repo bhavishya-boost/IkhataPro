@@ -66,39 +66,78 @@
 }
 
 [data-theme="dark"] {
-  /* Surface & Neutrals */
-  --bg-main: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-subtle: #334155;
-  --border-color: #334155;
-  --border-focus: #6366f1;
+  /* Surface & Neutrals — Premium Slate Dark */
+  --bg-main: #0b0f19;
+  --bg-surface: #151d30;
+  --bg-subtle: #1e293b;
+  --border-color: #2a364f;
+  --border-focus: #818cf8;
 
-  /* Text */
+  /* Text — Crisp High Contrast Typography */
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-light: #64748b;
-  --text-inverse: #0f172a;
+  --text-inverse: #0b0f19;
 
-  /* Semantic Light Backgrounds */
-  --primary-light: rgba(79, 70, 229, 0.2);
-  --success-light: rgba(16, 185, 129, 0.15);
-  --success-border: #065f46;
-  
-  --danger-light: rgba(239, 68, 68, 0.15);
-  --danger-border: #991b1b;
-  
-  --warning-light: rgba(245, 158, 11, 0.15);
-  --warning-border: #92400e;
+  /* Brand Palette & Vibrant Glows */
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-light: rgba(99, 102, 241, 0.22);
+  --primary-glow: rgba(99, 102, 241, 0.35);
 
-  --info-light: rgba(59, 130, 246, 0.15);
-  --ai-light: rgba(139, 92, 246, 0.2);
+  /* Semantic Colors - Softened for Dark Backgrounds */
+  --success: #34d399;
+  --success-light: rgba(16, 185, 129, 0.18);
+  --success-border: #059669;
+
+  --danger: #f87171;
+  --danger-light: rgba(239, 68, 68, 0.18);
+  --danger-border: #dc2626;
+
+  --warning: #fbbf24;
+  --warning-light: rgba(245, 158, 11, 0.18);
+  --warning-border: #d97706;
+
+  --info: #60a5fa;
+  --info-light: rgba(59, 130, 246, 0.18);
+
+  --ai: #a78bfa;
+  --ai-hover: #8b5cf6;
+  --ai-light: rgba(139, 92, 246, 0.22);
+  --ai-glow: rgba(167, 139, 250, 0.35);
 
   /* Dark Mode Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.65);
+  --shadow-xl: 0 20px 35px rgba(0, 0, 0, 0.8);
+  --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.4);
+}
+
+/* Dark Theme Specific Component Refinements */
+[data-theme="dark"] option {
+  background-color: #151d30;
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
+[data-theme="dark"] .kbd-shortcut {
+  background: #1e293b;
+  color: #94a3b8;
+  border-color: #2a364f;
+}
+
+[data-theme="dark"] .modal-overlay {
+  background-color: rgba(3, 7, 18, 0.78);
+}
+
+[data-theme="dark"] .auth-tab-btn:hover {
+  background: #1e293b;
+  color: #f8fafc;
 }
 
 
@@ -299,6 +338,25 @@ a {
   flex-direction: column;
   min-height: 100vh;
   width: calc(100vw - var(--sidebar-width));
+}
+
+/* Public Customer Shop Mode Shielding */
+body.public-shop-mode .sidebar,
+body.public-shop-mode .top-header,
+body.public-shop-mode .mobile-bottom-nav,
+body.public-shop-mode .fab-button {
+  display: none !important;
+}
+
+body.public-shop-mode .main-wrapper {
+  margin-left: 0 !important;
+  width: 100vw !important;
+}
+
+body.public-shop-mode .page-view {
+  padding: 16px !important;
+  max-width: 1100px !important;
+  margin: 0 auto !important;
 }
 
 /* Top App Header */

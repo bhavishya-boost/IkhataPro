@@ -32,22 +32,22 @@ window.iKhataStorefront = {
           <button class="btn btn-outline" onclick="window.iKhataStorefront.openPrintQRModal()">
             <span>🖨️</span> Counter QR Standee
           </button>
-          <button class="btn btn-primary" onclick="window.iKhataUI.navigate('customer-store', { slug: '${bus.slug}' })">
-            <span>👁️</span> Preview Customer Store
+          <button class="btn btn-primary" onclick="window.open('${storeUrl}', '_blank')">
+            <span>👁️</span> Preview Public Shop
           </button>
         </div>
       </div>
 
       <!-- Store URL Link Share Card -->
-      <div class="card" style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%); border: 1px solid rgba(79, 70, 229, 0.2);">
+      <div class="card" style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(147, 51, 234, 0.12) 100%); border: 1px solid var(--primary);">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
           <div>
-            <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">YOUR ONLINE DUKAAN LINK</div>
-            <div style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; margin-top: 4px; word-break: break-all;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">YOUR PUBLIC ONLINE DUKAAN LINK</div>
+            <div style="font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; margin-top: 4px; word-break: break-all; color: var(--text-main);">
               ${storeUrl}
             </div>
             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
-              Share this link with customers on WhatsApp or Instagram to take orders online 24/7.
+              Share this link or QR code with customers on WhatsApp to take online orders 24/7.
             </div>
           </div>
 
@@ -94,7 +94,7 @@ window.iKhataStorefront = {
       </div>
 
       <!-- Grid Layout: Settings + Product Online Visibility Manager -->
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
         
         <!-- Store Settings Card -->
         <div class="card" style="padding: 20px; align-self: start;">
@@ -140,17 +140,17 @@ window.iKhataStorefront = {
         <!-- Product Online Catalog Selector -->
         <div class="card" style="padding: 20px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-            <h3 style="font-size: 1.1rem; margin: 0;">📦 Manage Products Dukan Catalog</h3>
+            <h3 style="font-size: 1.1rem; margin: 0;">📦 Manage Dukan Online Catalog</h3>
             <span style="font-size: 0.85rem; color: var(--text-muted);">Toggle items to publish online</span>
           </div>
 
           <div style="display: grid; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 4px;">
             ${products.map(p => `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-bg);">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle);">
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <img src="${p.imageUrl || 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=100&q=80'}" style="width: 44px; height: 44px; border-radius: 6px; object-fit: cover;">
                   <div>
-                    <div style="font-weight: 700; font-size: 0.95rem;">${p.name}</div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${p.name}</div>
                     <div style="font-size: 0.8rem; color: var(--text-muted);">${formatCurrency(p.price)} • Stock: ${p.stock} • ${p.category}</div>
                   </div>
                 </div>
@@ -189,10 +189,10 @@ window.iKhataStorefront = {
     window.iKhataUI.openModal('Print Storefront Counter Standee', `
       <div style="text-align: center; padding: 10px;">
         <div style="font-size: 2.2rem;">${bus.logo || '🏪'}</div>
-        <h2 style="font-size: 1.4rem; margin-top: 4px;">${bus.name}</h2>
+        <h2 style="font-size: 1.4rem; margin-top: 4px; color: var(--text-main);">${bus.name}</h2>
         <p style="color: var(--text-muted); font-size: 0.85rem;">${bus.address}</p>
 
-        <div style="margin: 20px auto; display: inline-block; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+        <div style="margin: 20px auto; display: inline-block; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
           <img src="${qrApiUrl}" alt="Store QR Code" style="width: 200px; height: 200px; display: block;">
         </div>
 
@@ -215,7 +215,7 @@ window.iKhataStorefront = {
     `);
   },
 
-  // --- GUEST CUSTOMER SHOPPING VIEW ---
+  // --- GUEST CUSTOMER STANDALONE E-COMMERCE SHOP VIEW ---
   renderCustomerStore(slug) {
     const businesses = window.iKhataStore.state.businesses;
     const bus = businesses.find(b => b.slug === slug) || window.iKhataStore.getCurrentBusiness();
@@ -235,35 +235,44 @@ window.iKhataStorefront = {
 
     const cartCount = this.cart.reduce((sum, i) => sum + i.qty, 0);
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+    const storeUrl = `${window.location.origin}${window.location.pathname}#shop/${bus.slug}`;
+    const waNumber = bus.whatsappNumber || '919216953892';
 
     return `
       <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 90px;">
         
-        <!-- Store Header Banner -->
-        <div class="card" style="margin-bottom: 20px; padding: 24px; background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%); color: white;">
+        <!-- Standalone E-Commerce Store Banner -->
+        <div class="card" style="margin-bottom: 20px; padding: 24px; background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%); color: white; border-radius: var(--radius-xl);">
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 16px;">
-              <div style="font-size: 2.5rem; background: rgba(255,255,255,0.2); width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center;">
+              <div style="font-size: 2.5rem; background: rgba(255,255,255,0.2); width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                 ${bus.logo || '🏪'}
               </div>
               <div>
-                <h1 style="font-size: 1.6rem; color: white; margin: 0;">${bus.name}</h1>
-                <p style="font-size: 0.9rem; opacity: 0.9; margin-top: 2px;">${bus.storeTagline || bus.address}</p>
-                <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 4px;">
-                  📍 ${bus.city}, ${bus.state} • 🚚 Delivery: ${formatCurrency(bus.deliveryFee || 0)}
+                <h1 style="font-size: 1.6rem; color: white; margin: 0; font-weight: 800;">${bus.name}</h1>
+                <p style="font-size: 0.9rem; opacity: 0.95; margin-top: 2px;">${bus.storeTagline || bus.address}</p>
+                <div style="font-size: 0.8rem; opacity: 0.85; margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+                  <span>📍 ${bus.city}, ${bus.state}</span>
+                  <span>•</span>
+                  <span>🚚 Delivery: ${formatCurrency(bus.deliveryFee || 0)}</span>
                 </div>
               </div>
             </div>
 
-            <button class="btn" style="background: #25D366; color: white; border: none; font-weight: 700;" onclick="window.open('https://api.whatsapp.com/send?phone=${bus.whatsappNumber || '919216953892'}', '_blank')">
-              📲 Chat on WhatsApp
-            </button>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn" style="background: #25D366; color: white; border: none; font-weight: 700; border-radius: var(--radius-md);" onclick="window.open('https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent('Namaste ' + bus.name + '! I am viewing your online store.')}', '_blank')">
+                📲 Chat on WhatsApp
+              </button>
+              <button class="btn" style="background: rgba(255,255,255,0.2); color: white; border: none; font-weight: 600; border-radius: var(--radius-md);" onclick="navigator.clipboard.writeText('${storeUrl}'); window.iKhataUI.showToast('✓ Shop link copied!', 'success');">
+                📋 Share Shop
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Search & Category Filters -->
+        <!-- Search Bar & Category Filters -->
         <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; justify-content: space-between;">
-          <input type="text" class="form-input" style="max-width: 320px;" placeholder="Search online items..." value="${this.customerSearchQuery}" oninput="window.iKhataStorefront.customerSearchQuery = this.value; window.iKhataUI.refresh();">
+          <input type="text" class="form-input" style="max-width: 320px;" placeholder="🔍 Search online items..." value="${this.customerSearchQuery}" oninput="window.iKhataStorefront.customerSearchQuery = this.value; window.iKhataUI.refresh();">
 
           <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
             ${categories.map(cat => `
@@ -276,19 +285,25 @@ window.iKhataStorefront = {
 
         <!-- Online Products Grid -->
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;">
-          ${filtered.map(p => {
+          ${filtered.length === 0 ? `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+              <div class="empty-state-icon">📦</div>
+              <div class="empty-state-title">No products found</div>
+              <div class="empty-state-desc">Try clearing your search or category filter.</div>
+            </div>
+          ` : filtered.map(p => {
             const inCart = this.cart.find(c => c.id === p.id);
             const qty = inCart ? inCart.qty : 0;
 
             return `
               <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 12px;">
                 <div>
-                  <div style="position: relative; width: 100%; height: 140px; border-radius: 8px; overflow: hidden; margin-bottom: 10px; background: #f3f4f6;">
+                  <div style="position: relative; width: 100%; height: 140px; border-radius: 8px; overflow: hidden; margin-bottom: 10px; background: var(--bg-subtle);">
                     <img src="${p.imageUrl || 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80'}" style="width: 100%; height: 100%; object-fit: cover;">
                     ${p.stock <= 0 ? `<div style="position: absolute; inset: 0; background: rgba(0,0,0,0.6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">Out of Stock</div>` : ''}
                   </div>
                   
-                  <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 2px;">${p.name}</div>
+                  <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 2px; color: var(--text-main);">${p.name}</div>
                   <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; line-clamp: 2;">${p.description || p.category}</div>
                 </div>
 
@@ -305,7 +320,7 @@ window.iKhataStorefront = {
                     </div>
                   ` : `
                     <button class="btn btn-outline btn-sm" onclick="window.iKhataStorefront.addToCart('${p.id}')">
-                      + Add
+                      + Add to Cart
                     </button>
                   `)}
                 </div>
@@ -314,18 +329,18 @@ window.iKhataStorefront = {
           }).join('')}
         </div>
 
-        <!-- Sticky Bottom Shopping Cart Bar (Customer) -->
+        <!-- Floating Cart Bar for Guest Customer -->
         ${cartCount > 0 ? `
-          <div style="position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; background: var(--surface-bg); border: 1px solid var(--primary); box-shadow: 0 8px 32px rgba(0,0,0,0.25); border-radius: 12px; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; z-index: 1000;">
+          <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; background: var(--bg-surface); border: 2px solid var(--primary); box-shadow: var(--shadow-xl); border-radius: 16px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; z-index: 500;">
             <div>
-              <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">${cartCount} ITEMS IN CART</div>
-              <div style="font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--primary);">
+              <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">${cartCount} ITEM(S) IN CART</div>
+              <div style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; color: var(--primary);">
                 ${formatCurrency(cartSubtotal)}
               </div>
             </div>
 
-            <button class="btn btn-primary" onclick="window.iKhataStorefront.openCheckoutModal('${bus.slug}')">
-              🛒 Proceed to Checkout →
+            <button class="btn btn-primary btn-lg" onclick="window.iKhataStorefront.openCheckoutModal('${bus.slug}')">
+              🛒 Checkout & Order →
             </button>
           </div>
         ` : ''}
@@ -364,21 +379,21 @@ window.iKhataStorefront = {
     const total = cartSubtotal + deliveryFee;
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
 
-    window.iKhataUI.openModal('Complete Your Order', `
+    window.iKhataUI.openModal('Complete Your Online Order', `
       <form onsubmit="event.preventDefault(); window.iKhataStorefront.submitOrder(this, '${bus.slug}');">
-        <div style="margin-bottom: 16px; padding: 12px; background: var(--surface-bg); border-radius: 8px;">
-          <div style="font-weight: 700; margin-bottom: 8px;">Order Summary</div>
+        <div style="margin-bottom: 16px; padding: 14px; background: var(--bg-subtle); border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-weight: 700; margin-bottom: 8px; color: var(--text-main);">Order Summary</div>
           ${this.cart.map(i => `
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; color: var(--text-main);">
               <span>${i.name} x ${i.qty}</span>
               <span>${formatCurrency(i.price * i.qty)}</span>
             </div>
           `).join('')}
-          <div style="border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 8px; display: flex; justify-content: space-between; font-size: 0.85rem;">
+          <div style="border-top: 1px solid var(--border-color); margin-top: 8px; padding-top: 8px; display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted);">
             <span>Delivery Fee</span>
             <span>${formatCurrency(deliveryFee)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 1rem; margin-top: 6px; color: var(--primary);">
+          <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 1.1rem; margin-top: 6px; color: var(--primary);">
             <span>Total Payable</span>
             <span>${formatCurrency(total)}</span>
           </div>
@@ -402,9 +417,9 @@ window.iKhataStorefront = {
         <div class="form-group" style="margin-bottom: 16px;">
           <label class="form-label">Payment Method</label>
           <select name="paymentMethod" class="form-input">
+            <option value="WhatsApp">💬 Direct Order to Malik via WhatsApp</option>
             <option value="UPI">📲 Pay via Instant UPI QR</option>
             <option value="COD">💵 Cash on Delivery (COD)</option>
-            <option value="WhatsApp">💬 Send Order to WhatsApp</option>
           </select>
         </div>
 
@@ -437,22 +452,26 @@ window.iKhataStorefront = {
     this.cart = []; // clear cart
     window.iKhataUI.closeModal();
 
+    const waNumber = bus.whatsappNumber || '919216953892';
+
     if (paymentMethod === 'WhatsApp') {
       const itemsList = order.items.map(i => `• ${i.name} (${i.qty}x) = ₹${i.price * i.qty}`).join('%0A');
-      const waMsg = `*NEW ONLINE ORDER #${order.id}*%0A%0A*Customer:* ${order.customerName}%0A*Phone:* ${order.customerPhone}%0A*Address:* ${order.address}%0A%0A*Items:*%0A${itemsList}%0A%0A*Subtotal:* ₹${order.subtotal}%0A*Delivery:* ₹${order.deliveryFee}%0A*Total Payable:* ₹${order.total}%0A*Payment:* ${order.paymentMethod}`;
-      window.open(`https://api.whatsapp.com/send?phone=${bus.whatsappNumber || '919216953892'}&text=${waMsg}`, '_blank');
-      window.iKhataUI.showToast('✓ Order placed & sent via WhatsApp!', 'success');
+      const waMsg = `*NEW ONLINE ORDER #${order.id}*%0A%0A*Customer:* ${order.customerName}%0A*Phone:* ${order.customerPhone}%0A*Address:* ${order.address}%0A%0A*Items:*%0A${itemsList}%0A%0A*Subtotal:* ₹${order.subtotal}%0A*Delivery:* ₹${order.deliveryFee}%0A*Total Payable:* ₹${order.total}%0A*Payment:* Direct Order`;
+      window.open(`https://api.whatsapp.com/send?phone=${waNumber}&text=${waMsg}`, '_blank');
+      window.iKhataUI.showToast('✓ Order placed & sent directly to Malik on WhatsApp!', 'success');
     } else if (paymentMethod === 'UPI') {
-      const upiUrl = `upi://pay?pa=${bus.whatsappNumber || '919216953892'}@paytm&pn=${encodeURIComponent(bus.name)}&am=${total}&cu=INR`;
+      const upiUrl = `upi://pay?pa=${waNumber}@paytm&pn=${encodeURIComponent(bus.name)}&am=${total}&cu=INR`;
       const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiUrl)}`;
 
       window.iKhataUI.openModal('Pay via UPI QR', `
         <div style="text-align: center; padding: 12px;">
-          <h3 style="margin-bottom: 4px;">Scan & Pay ₹${total}</h3>
+          <h3 style="margin-bottom: 4px; color: var(--text-main);">Scan & Pay ₹${total}</h3>
           <p style="font-size: 0.85rem; color: var(--text-muted);">Order #${order.id} placed successfully!</p>
-          <img src="${qrApiUrl}" style="width: 180px; height: 180px; margin: 16px auto; display: block;">
+          <div style="margin: 16px auto; padding: 12px; background: white; border-radius: 12px; display: inline-block;">
+            <img src="${qrApiUrl}" style="width: 180px; height: 180px; display: block;">
+          </div>
           <p style="font-size: 0.8rem; color: var(--text-muted);">Pay using Paytm, GooglePay, PhonePe or BHIM</p>
-          <button class="btn btn-primary" style="margin-top: 12px;" onclick="window.iKhataUI.closeModal(); window.iKhataUI.showToast('✓ Payment confirmed! Order is being prepared.', 'success');">
+          <button class="btn btn-primary" style="margin-top: 12px;" onclick="window.iKhataUI.closeModal(); window.iKhataUI.showToast('✓ Payment confirmed! Order sent to shop.', 'success');">
             I Have Completed Payment
           </button>
         </div>

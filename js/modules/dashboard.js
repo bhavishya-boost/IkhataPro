@@ -42,17 +42,17 @@ window.iKhataDashboard = {
 
       <!-- Smart Alert Banner Carousel / Cards -->
       ${alerts.length > 0 ? `
-        <div class="card" style="margin-bottom: 24px; border-left: 4px solid var(--primary-color); background: #f8fafc; padding: 16px;">
+        <div class="card" style="margin-bottom: 24px; border-left: 4px solid var(--primary); background: var(--bg-surface); padding: 16px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+            <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; color: var(--text-main);">
               <span>⚡</span> Smart Alert Center (${alerts.length})
             </div>
             <span class="badge badge-neutral" style="font-size: 0.75rem;">Live</span>
           </div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             ${alerts.slice(0, 3).map(a => `
-              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 8px 12px; background: white; border-radius: 8px; border: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 14px; background: var(--bg-subtle); border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: var(--text-main);">
                   <span style="font-size: 1.1rem;">${a.icon}</span>
                   <span>${a.text}</span>
                 </div>
@@ -143,21 +143,21 @@ window.iKhataDashboard = {
           </div>
 
           <div style="display: flex; align-items: center; gap: 20px; margin: 16px 0;">
-            <div style="width: 80px; height: 80px; border-radius: 50%; background: conic-gradient(${health.color} ${health.score * 3.6}deg, #e2e8f0 0deg); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <div style="width: 64px; height: 64px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.4rem; color: ${health.color};">
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: conic-gradient(${health.color} ${health.score * 3.6}deg, var(--border-color) 0deg); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <div style="width: 64px; height: 64px; border-radius: 50%; background: var(--bg-surface); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.4rem; color: ${health.color};">
                 ${health.score}
               </div>
             </div>
 
             <div>
-              <div style="font-weight: 700; font-size: 1.1rem;">${health.label} Condition</div>
+              <div style="font-weight: 700; font-size: 1.1rem; color: var(--text-main);">${health.label} Condition</div>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
                 ${health.risks.length > 0 ? health.risks[0] : 'All key metrics are operating smoothly.'}
               </p>
             </div>
           </div>
 
-          <div style="font-size: 0.85rem; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 0.85rem; background: var(--bg-subtle); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); color: var(--text-main);">
             <strong style="color: var(--success);">Positive Factor:</strong> ${health.positives[0] || 'Good customer activity.'}
           </div>
         </div>

@@ -485,7 +485,7 @@ tbody td {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1100;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -734,5 +734,67 @@ option.add-new-option {
 #quick-customer-modal-overlay {
   z-index: 1200 !important;
 }
+
+/* Quick Actions Grid & Buttons System */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.quick-action-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-main);
+  text-align: center;
+}
+
+.quick-action-btn:hover {
+  border-color: var(--primary);
+  background: var(--bg-subtle);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.quick-action-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.quick-action-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Invoice PDF Modal Paper View Protection */
+#invoice-pdf-container {
+  background-color: #ffffff !important;
+}
+#invoice-pdf-container h1,
+#invoice-pdf-container h2,
+#invoice-pdf-container h3,
+#invoice-pdf-container h4,
+#invoice-pdf-container p,
+#invoice-pdf-container span,
+#invoice-pdf-container td,
+#invoice-pdf-container th,
+#invoice-pdf-container div {
+  color: #0f172a;
+}
+#invoice-pdf-container thead th {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+}
+
 
 
