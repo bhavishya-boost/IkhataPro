@@ -3261,6 +3261,29 @@
       return this.state.onlineOrders.filter(o => this.isRecordForActiveBusiness(o) && !o.isDeleted);
     }
 
+    addOnlineOrder({ customerName, customerPhone, address, items, subtotal, deliveryFee, total, paymentMethod }) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.onlineOrders) this.state.onlineOrders = [];
+      const newOrder = {
+        id: 'ORD-' + Math.floor(100000 + Math.random() * 900000),
+        business_id: bId,
+        customerName: customerName || 'Guest Customer',
+        customerPhone: customerPhone || '',
+        address: address || '',
+        items: items || [],
+        subtotal: Number(subtotal || 0),
+        deliveryFee: Number(deliveryFee || 0),
+        total: Number(total || 0),
+        paymentMethod: paymentMethod || 'WhatsApp',
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+        isDeleted: false
+      };
+      this.state.onlineOrders.unshift(newOrder);
+      this.saveState();
+      return newOrder;
+    }
+
     updateOrderStatus(orderId, status) {
       const bId = this.getActiveBusinessId();
       if (!this.state.onlineOrders) this.state.onlineOrders = [];

@@ -10,6 +10,8 @@ window.iKhataStorefront = {
   renderManager(state) {
     const bus = window.iKhataStore.getCurrentBusiness();
     const products = window.iKhataStore.getProducts();
+    const orders = window.iKhataStore.getOnlineOrders();
+    const pendingOrders = orders.filter(o => o.status === 'Pending');
     const onlineProductsCount = products.filter(p => p.isOnlineVisible !== false).length;
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
     const storeUrl = `${window.location.origin}${window.location.pathname}#shop/${bus.slug}`;
@@ -29,6 +31,9 @@ window.iKhataStorefront = {
         </div>
 
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn btn-warning" onclick="window.iKhataPOS.openOnlineOrdersModal()">
+            <span>📦</span> Online Orders ${pendingOrders.length > 0 ? `<span class="badge badge-danger" style="margin-left: 4px;">${pendingOrders.length} New</span>` : ''}
+          </button>
           <button class="btn btn-outline" onclick="window.iKhataStorefront.openPrintQRModal()">
             <span>🖨️</span> Counter QR Standee
           </button>
@@ -63,24 +68,31 @@ window.iKhataStorefront = {
       </div>
 
       <!-- Quick Metrics -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="card" style="padding: 16px; cursor: pointer;" onclick="window.iKhataPOS.openOnlineOrdersModal();">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">PENDING ORDERS</div>
+          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: ${pendingOrders.length > 0 ? '#f59e0b' : 'var(--text-main)'}; margin-top: 4px;">
+            ${pendingOrders.length} ${pendingOrders.length > 0 ? '⚠️' : '✓'}
+          </div>
+        </div>
+
         <div class="card" style="padding: 16px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">ONLINE ITEMS LISTED</div>
-          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--primary);">
+          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--primary); margin-top: 4px;">
             ${onlineProductsCount} / ${products.length}
           </div>
         </div>
 
         <div class="card" style="padding: 16px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">DELIVERY CHARGE</div>
-          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800;">
+          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; margin-top: 4px;">
             ${formatCurrency(bus.deliveryFee || 0)}
           </div>
         </div>
 
         <div class="card" style="padding: 16px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">MINIMUM ORDER VALUE</div>
-          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800;">
+          <div style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; margin-top: 4px;">
             ${formatCurrency(bus.minOrderAmount || 0)}
           </div>
         </div>
@@ -91,6 +103,63 @@ window.iKhataStorefront = {
             +${bus.whatsappNumber || 'Not Set'}
           </div>
         </div>
+      </div>
+
+      <!-- Online Customer Orders Section -->
+      <div class="card" style="margin-bottom: 24px; padding: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <h3 style="font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 8px;">
+            <span>📦</span> Online Customer Orders (${orders.length})
+          </h3>
+          <button class="btn btn-outline btn-sm" onclick="window.iKhataPOS.openOnlineOrdersModal()">
+            View Full Screen Orders
+          </button>
+        </div>
+
+        ${orders.length === 0 ? `
+          <div style="text-align: center; padding: 24px; background: var(--bg-subtle); border-radius: 8px;">
+            <div style="font-size: 2rem; margin-bottom: 8px;">🛍️</div>
+            <div style="font-weight: 600; color: var(--text-main);">No Online Orders Yet</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Orders placed by customers on your Online Dukaan link will appear here.</div>
+          </div>
+        ` : `
+          <div style="display: grid; gap: 12px; max-height: 380px; overflow-y: auto;">
+            ${orders.slice(0, 5).map(o => `
+              <div style="padding: 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <div>
+                    <strong>Order #${o.id}</strong> • <span style="font-size: 0.8rem; color: var(--text-muted);">${new Date(o.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                  </div>
+                  <span class="badge ${o.status === 'Pending' ? 'badge-warning' : 'badge-success'}">${o.status}</span>
+                </div>
+
+                <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 4px;">
+                  👤 ${o.customerName} (${o.customerPhone})
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                  📍 ${o.address} • Payment: <strong>${o.paymentMethod}</strong>
+                </div>
+
+                <div style="font-size: 0.8rem; background: var(--surface-bg); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+                  ${o.items.map(i => `<div>${i.name} x ${i.qty} = ${formatCurrency(i.price * i.qty)}</div>`).join('')}
+                  <div style="font-weight: 800; margin-top: 4px; border-top: 1px solid var(--border-color); padding-top: 4px; display: flex; justify-content: space-between;">
+                    <span>Total Payable:</span>
+                    <span>${formatCurrency(o.total)}</span>
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.iKhataUI.navigate('pos'); setTimeout(() => window.iKhataPOS.loadOnlineOrderToCart('${o.id}'), 100);">
+                    ⚡ Accept & Load into POS Cart
+                  </button>
+                  <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataUI.refresh();">
+                    🚚 Dispatch
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
       </div>
 
       <!-- Grid Layout: Settings + Product Online Visibility Manager -->
@@ -373,14 +442,15 @@ window.iKhataStorefront = {
   },
 
   openCheckoutModal(slug) {
-    const bus = window.iKhataStore.state.businesses.find(b => b.slug === slug) || window.iKhataStore.getCurrentBusiness();
+    const bus = (slug && window.iKhataStore.state.businesses ? window.iKhataStore.state.businesses.find(b => b.slug === slug) : null) || window.iKhataStore.getCurrentBusiness() || {};
+    const busSlug = bus.slug || slug || '';
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
     const deliveryFee = bus.deliveryFee || 0;
     const total = cartSubtotal + deliveryFee;
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
 
     window.iKhataUI.openModal('Complete Your Online Order', `
-      <form onsubmit="event.preventDefault(); window.iKhataStorefront.submitOrder(this, '${bus.slug}');">
+      <form onsubmit="event.preventDefault(); window.iKhataStorefront.submitOrder(this, '${busSlug}');">
         <div style="margin-bottom: 16px; padding: 14px; background: var(--bg-subtle); border-radius: 8px; border: 1px solid var(--border-color);">
           <div style="font-weight: 700; margin-bottom: 8px; color: var(--text-main);">Order Summary</div>
           ${this.cart.map(i => `
@@ -432,7 +502,7 @@ window.iKhataStorefront = {
 
   submitOrder(form, slug) {
     const data = new FormData(form);
-    const bus = window.iKhataStore.state.businesses.find(b => b.slug === slug) || window.iKhataStore.getCurrentBusiness();
+    const bus = (slug && window.iKhataStore.state.businesses ? window.iKhataStore.state.businesses.find(b => b.slug === slug) : null) || window.iKhataStore.getCurrentBusiness() || {};
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
     const deliveryFee = bus.deliveryFee || 0;
     const total = cartSubtotal + deliveryFee;
