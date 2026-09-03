@@ -579,6 +579,38 @@
       return this.state.businesses.find(b => b.id === bId) || this.state.businesses[0];
     }
 
+    updateStorefrontSettings(settings) {
+      const bus = this.getCurrentBusiness();
+      if (!bus) return false;
+
+      if (settings.storeActive !== undefined) bus.storeActive = Boolean(settings.storeActive);
+      if (settings.storeTagline !== undefined) bus.storeTagline = String(settings.storeTagline || '').trim();
+      if (settings.deliveryFee !== undefined) bus.deliveryFee = parseFloat(settings.deliveryFee) || 0;
+      if (settings.minOrderAmount !== undefined) bus.minOrderAmount = parseFloat(settings.minOrderAmount) || 0;
+      if (settings.whatsappNumber !== undefined) bus.whatsappNumber = String(settings.whatsappNumber || '').trim();
+
+      this.logAudit('STOREFRONT_SETTINGS_UPDATED', 'Business', bus.id, `Updated storefront settings for ${bus.name}`);
+      this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        window.iKhataSupabase.syncBusinessToCloud(bus).catch(err => console.warn('Storefront settings cloud sync warning:', err.message));
+      }
+
+      return true;
+    }
+
+    toggleProductOnlineVisibility(productId) {
+      const bId = this.getActiveBusinessId();
+      if (!this.state.products) return false;
+      const prod = this.state.products.find(p => p.id === productId && p.business_id === bId);
+      if (prod) {
+        prod.isOnlineVisible = prod.isOnlineVisible === false ? true : false;
+        this.saveState();
+        return true;
+      }
+      return false;
+    }
+
     // ─── RBAC ROLE & PERMISSIONS ENGINE ───────────────────────────────────────
     // Roles: OWNER, MANAGER, ACCOUNTANT, CASHIER, SALESMAN
     getCurrentUserRole() {
