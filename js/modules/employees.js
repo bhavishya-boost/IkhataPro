@@ -4,8 +4,11 @@ window.iKhataEmployees = {
   render(state) {
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
 
-    const employees = window.iKhataStore.getEmployees() || [];
-    
+    const employees = window.iKhataStore ? (window.iKhataStore.getEmployees() || []) : [];
+    const currentRole = window.iKhataStore ? window.iKhataStore.getCurrentUserRole() : 'OWNER';
+    const currentEmp = window.iKhataStore ? window.iKhataStore.getCurrentEmployee() : null;
+    const sessionName = currentEmp ? currentEmp.name : 'Primary Owner';
+
     const sortedBySales = [...employees].sort((a, b) => (b.sales || 0) - (a.sales || 0));
     const topSeller = sortedBySales[0] && (sortedBySales[0].sales || 0) > 0 ? sortedBySales[0] : null;
 
@@ -16,11 +19,34 @@ window.iKhataEmployees = {
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
         <div>
           <h1 style="font-size: 1.75rem;">Employees & Permissions</h1>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">Manage shop staff, role permissions, and sales performance leaderboards</p>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Manage shop staff, role permissions, and active staff sessions</p>
         </div>
-        <button class="btn btn-primary" onclick="window.iKhataEmployees.openAddEmployeeModal()">
-          <span>➕</span> Add Employee
-        </button>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn btn-outline" onclick="window.iKhataEmployees.openStaffSwitchModal()">
+            🔄 Switch Staff Session (${sessionName})
+          </button>
+          <button class="btn btn-primary" onclick="window.iKhataEmployees.openAddEmployeeModal()">
+            <span>➕</span> Add Employee
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Session Status Card -->
+      <div class="card" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.02)); border-color: rgba(99, 102, 241, 0.3); margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">🔑</div>
+            <div>
+              <div style="font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Active Staff Session</div>
+              <h3 style="margin-top: 2px; font-size: 1.15rem;">
+                ${sessionName} <span class="badge badge-ai" style="margin-left: 6px;">${currentRole}</span>
+              </h3>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="window.iKhataEmployees.switchStaff('OWNER')">
+            👑 Reset to Primary Owner
+          </button>
+        </div>
       </div>
 
       <!-- Employee Performance Leaderboard -->
@@ -61,56 +87,173 @@ window.iKhataEmployees = {
               <p style="font-weight: 600; font-size: 1rem; color: var(--text-color); margin-bottom: 4px;">Koi Employee Add Nahi Hai</p>
               <p style="font-size: 0.85rem;">Upar "➕ Add Employee" button par click karke naya staff member add karein.</p>
             </div>
-          ` : employees.map(emp => `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px;">
-              <div>
-                <strong style="font-size: 1rem;">${emp.name}</strong>
-                <span class="badge badge-ai" style="margin-left: 8px;">${emp.role}</span>
-                <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">📱 ${emp.phone}</div>
-              </div>
-
-              <div style="display: flex; gap: 16px; align-items: center;">
-                <div style="text-align: right; font-size: 0.85rem;">
-                  <div>Sales: <strong>${formatCurrency(emp.sales)}</strong></div>
-                  <div style="color: var(--text-muted);">Collections: ${formatCurrency(emp.collections)}</div>
+          ` : employees.map(emp => {
+            const hasCustom = emp.permissions && Object.keys(emp.permissions).length > 0;
+            const empId = emp.id || emp.name;
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <strong style="font-size: 1rem;">${emp.name}</strong>
+                  <span class="badge badge-ai" style="margin-left: 8px;">${emp.role}</span>
+                  ${hasCustom ? `<span class="badge badge-warning" style="margin-left: 4px; font-size: 0.75rem;">Custom RBAC</span>` : ''}
+                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">📱 ${emp.phone}</div>
                 </div>
 
-                <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.openRBACModal('${emp.name}', '${emp.role}')">
-                  ⚙️ Permissions
-                </button>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <div style="text-align: right; font-size: 0.85rem; margin-right: 8px;">
+                    <div>Sales: <strong>${formatCurrency(emp.sales)}</strong></div>
+                    <div style="color: var(--text-muted);">Collections: ${formatCurrency(emp.collections)}</div>
+                  </div>
+
+                  <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.switchStaff('${empId}')">
+                    👤 Login As
+                  </button>
+
+                  <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.openRBACModal('${empId}')">
+                    ⚙️ Permissions
+                  </button>
+
+                  <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--danger);" onclick="window.iKhataEmployees.confirmDeleteEmployee('${empId}')" title="Delete Staff Member">
+                    🗑️
+                  </button>
+                </div>
               </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       </div>
     `;
   },
 
-  openRBACModal(name, role) {
-    window.iKhataUI.openModal(`Permissions: ${name} (${role})`, `
+  openStaffSwitchModal() {
+    const employees = window.iKhataStore ? (window.iKhataStore.getEmployees() || []) : [];
+    window.iKhataUI.openModal('🔄 Switch Active Staff Session', `
       <div style="display: flex; flex-direction: column; gap: 12px;">
-        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-          <span>View Customer Balances</span>
-          <input type="checkbox" checked style="width: 18px; height: 18px;">
-        </label>
-        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-          <span>Add Khata & Receive Payments</span>
-          <input type="checkbox" checked style="width: 18px; height: 18px;">
-        </label>
-        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-          <span>Delete Transactions</span>
-          <input type="checkbox" ${role === 'Owner' ? 'checked' : ''} style="width: 18px; height: 18px;">
-        </label>
-        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-          <span>View Profit & Reports</span>
-          <input type="checkbox" ${role === 'Owner' || role === 'Accountant' ? 'checked' : ''} style="width: 18px; height: 18px;">
-        </label>
-
-        <button class="btn btn-primary" style="margin-top: 16px;" onclick="window.iKhataUI.closeModal(); window.iKhataUI.showToast('✓ Role permissions saved!', 'success');">
-          Save Permissions
+        <p style="font-size: 0.9rem; color: var(--text-muted);">Kis staff member ke role/session me switch karna chahte hain?</p>
+        
+        <button class="btn btn-outline" style="justify-content: flex-start; padding: 12px;" onclick="window.iKhataEmployees.switchStaff('OWNER')">
+          👑 <strong>Primary Shop Owner</strong> (Full Access)
         </button>
+
+        ${employees.map(emp => `
+          <button class="btn btn-outline" style="justify-content: flex-start; padding: 12px;" onclick="window.iKhataEmployees.switchStaff('${emp.id || emp.name}')">
+            👤 <strong>${emp.name}</strong> — ${emp.role} (📱 ${emp.phone})
+          </button>
+        `).join('')}
       </div>
     `);
+  },
+
+  switchStaff(empIdOrName) {
+    if (window.iKhataStore && typeof window.iKhataStore.switchStaffSession === 'function') {
+      window.iKhataStore.switchStaffSession(empIdOrName);
+      window.iKhataUI.closeModal();
+      const roleName = empIdOrName === 'OWNER' ? 'Owner' : empIdOrName;
+      window.iKhataUI.showToast(`✅ Session switched to ${roleName}!`, 'success');
+      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+        window.iKhataUI.refresh();
+      }
+    }
+  },
+
+  openRBACModal(empIdOrName) {
+    const employees = window.iKhataStore ? (window.iKhataStore.getEmployees() || []) : [];
+    const emp = employees.find(e => e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase())) || { name: empIdOrName, role: 'Salesman' };
+
+    const role = emp.role || 'Salesman';
+    const perms = emp.permissions || {};
+
+    const viewBalances = perms.viewBalances !== undefined ? perms.viewBalances : true;
+    const receivePayments = perms.receivePayments !== undefined ? perms.receivePayments : true;
+    const deleteTransactions = perms.deleteTransactions !== undefined ? perms.deleteTransactions : (role === 'Owner' || role === 'Manager');
+    const viewProfit = perms.viewProfit !== undefined ? perms.viewProfit : (role === 'Owner' || role === 'Accountant');
+
+    window.iKhataUI.openModal(`Permissions: ${emp.name} (${role})`, `
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+          <div>
+            <strong>View Customer Balances</strong>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Allow viewing customer khata balances</div>
+          </div>
+          <input type="checkbox" id="rbac-perm-view-balances" ${viewBalances ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+        </label>
+
+        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+          <div>
+            <strong>Add Khata & Receive Payments</strong>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Allow adding transactions & accepting cash</div>
+          </div>
+          <input type="checkbox" id="rbac-perm-receive-payments" ${receivePayments ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+        </label>
+
+        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+          <div>
+            <strong>Delete Transactions & Records</strong>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Allow soft deleting khata, invoices & expenses</div>
+          </div>
+          <input type="checkbox" id="rbac-perm-delete-tx" ${deleteTransactions ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+        </label>
+
+        <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 6px 0;">
+          <div>
+            <strong>View Profit & Financial Reports</strong>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Allow viewing P&L statements & net margins</div>
+          </div>
+          <input type="checkbox" id="rbac-perm-view-profit" ${viewProfit ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+        </label>
+
+        <div style="display: flex; gap: 10px; margin-top: 14px;">
+          <button class="btn btn-outline" style="flex: 1;" onclick="window.iKhataEmployees.resetPermissions('${emp.id || emp.name}')">
+            ↺ Reset Defaults
+          </button>
+          <button class="btn btn-primary" style="flex: 2;" onclick="window.iKhataEmployees.savePermissions('${emp.id || emp.name}')">
+            💾 Save Permissions
+          </button>
+        </div>
+      </div>
+    `);
+  },
+
+  confirmDeleteEmployee(empId) {
+    if (confirm('Kya aap is staff member ko delete karna chahte hain?')) {
+      if (window.iKhataStore && typeof window.iKhataStore.deleteEmployee === 'function') {
+        window.iKhataStore.deleteEmployee(empId);
+        window.iKhataUI.showToast('✓ Employee deleted successfully!', 'info');
+        if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+          window.iKhataUI.refresh();
+        }
+      }
+    }
+  },
+
+  resetPermissions(empId) {
+    if (window.iKhataStore && typeof window.iKhataStore.resetEmployeePermissions === 'function') {
+      window.iKhataStore.resetEmployeePermissions(empId);
+      window.iKhataUI.closeModal();
+      window.iKhataUI.showToast('✓ Permissions reset to role defaults!', 'success');
+      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+        window.iKhataUI.refresh();
+      }
+    }
+  },
+
+  savePermissions(empIdOrName) {
+    const viewBalances = Boolean(document.getElementById('rbac-perm-view-balances')?.checked);
+    const receivePayments = Boolean(document.getElementById('rbac-perm-receive-payments')?.checked);
+    const deleteTransactions = Boolean(document.getElementById('rbac-perm-delete-tx')?.checked);
+    const viewProfit = Boolean(document.getElementById('rbac-perm-view-profit')?.checked);
+
+    const permissions = { viewBalances, receivePayments, deleteTransactions, viewProfit };
+
+    if (window.iKhataStore && typeof window.iKhataStore.updateEmployeePermissions === 'function') {
+      window.iKhataStore.updateEmployeePermissions(empIdOrName, permissions);
+    }
+
+    window.iKhataUI.closeModal();
+    window.iKhataUI.showToast('✓ Role permissions saved successfully!', 'success');
+    if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+      window.iKhataUI.refresh();
+    }
   },
 
   openAddEmployeeModal() {
@@ -168,5 +311,8 @@ window.iKhataEmployees = {
 
     window.iKhataUI.closeModal();
     window.iKhataUI.showToast(`✅ ${name} saved successfully!`, 'success');
+    if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+      window.iKhataUI.refresh();
+    }
   }
 };

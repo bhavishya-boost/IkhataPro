@@ -5,7 +5,8 @@ window.iKhataModule = {
   searchQuery: '',
 
   render(state) {
-    const formatCurrency = (amt) => '₹' + Math.abs(amt || 0).toLocaleString('en-IN');
+    const canViewBalances = window.iKhataStore && typeof window.iKhataStore.checkPermission === 'function' ? window.iKhataStore.checkPermission('VIEW_BALANCES') : true;
+    const formatCurrency = (amt) => canViewBalances ? ('₹' + Math.abs(amt || 0).toLocaleString('en-IN')) : '₹ ***';
     const bus = window.iKhataStore.getCurrentBusiness();
     let customers = window.iKhataStore.getCustomers();
 

@@ -5,6 +5,21 @@ window.iKhataPNL = {
   activeTab: 'PNL', // 'PNL' or 'CASHFLOW'
 
   render(state) {
+    if (window.iKhataStore && typeof window.iKhataStore.checkPermission === 'function' && !window.iKhataStore.checkPermission('VIEW_PNL')) {
+      return `
+        <div class="card" style="text-align: center; padding: 48px 24px; max-width: 600px; margin: 40px auto;">
+          <div style="font-size: 3.5rem; margin-bottom: 12px;">🔒</div>
+          <h2 style="font-size: 1.5rem; margin-bottom: 8px;">Access Restricted (RBAC)</h2>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px;">
+            Profit & Loss reports viewing requires Owner or Accountant permissions. Aapke active staff role (${window.iKhataStore.getCurrentUserRole()}) ko ye access nahi hai.
+          </p>
+          <button class="btn btn-primary" onclick="window.iKhataPIN.requirePIN(() => window.iKhataUI.refresh(), 'Unlock Financial Reports')">
+            🔑 Unlock with Owner PIN
+          </button>
+        </div>
+      `;
+    }
+
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
     const bus = window.iKhataStore.getCurrentBusiness();
     const pnl = window.iKhataStore.getFinancialPNL(this.currentPeriod);

@@ -580,30 +580,141 @@
     }
 
     // ─── RBAC ROLE & PERMISSIONS ENGINE ───────────────────────────────────────
-    // Roles: OWNER, MANAGER, ACCOUNTANT, CASHIER
+    // Roles: OWNER, MANAGER, ACCOUNTANT, CASHIER, SALESMAN
     getCurrentUserRole() {
-      const bId = this.getActiveBusinessId();
       const session = this.state.currentSession;
-      if (!session || !session.user || !session.user.name) return 'CASHIER';
+      if (!session || !session.user || !session.user.name) return 'OWNER';
+      const name = String(session.user.name).toLowerCase();
+      if (name === 'owner' || name.includes('owner') || session.user.id === 'owner' || (session.user.role && String(session.user.role).toUpperCase() === 'OWNER')) {
+        return 'OWNER';
+      }
       
       const employees = this.getEmployees();
-      const currentEmp = employees.find(e => e.name && session.user.name && e.name.toLowerCase() === session.user.name.toLowerCase());
+      const currentEmp = employees.find(e => (session.user.id && e.id === session.user.id) || (e.name && e.name.toLowerCase() === name));
       if (currentEmp && currentEmp.role) {
         return currentEmp.role.toUpperCase();
       }
-      return 'OWNER'; // Default to Owner if logged in as primary shop owner
+      return session.user.role ? String(session.user.role).toUpperCase() : 'OWNER';
+    }
+
+    getCurrentEmployee() {
+      const session = this.state.currentSession;
+      if (!session || !session.user || !session.user.name) return null;
+      const name = String(session.user.name).toLowerCase();
+      if (name === 'owner' || name.includes('owner') || session.user.id === 'owner' || (session.user.role && String(session.user.role).toUpperCase() === 'OWNER')) {
+        return null;
+      }
+      const employees = this.getEmployees();
+      return employees.find(e => (session.user.id && e.id === session.user.id) || (e.name && e.name.toLowerCase() === name)) || null;
+    }
+
+    switchStaffSession(empIdOrName) {
+      if (!this.state.currentSession) {
+        this.state.currentSession = {};
+      }
+      if (!empIdOrName || empIdOrName === 'OWNER' || empIdOrName === 'owner' || String(empIdOrName).toLowerCase().includes('owner')) {
+        this.state.currentSession.user = { name: 'Owner', role: 'OWNER', id: 'owner' };
+        this.saveState();
+        return true;
+      }
+      const emps = this.getEmployees();
+      const emp = emps.find(e => e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase()));
+      if (emp) {
+        this.state.currentSession.user = { name: emp.name, role: emp.role || 'Salesman', id: emp.id };
+        this.saveState();
+        return true;
+      }
+      return false;
+    }
+
+    updateEmployeePermissions(empIdOrName, permissions) {
+      if (!this.state.employees) this.state.employees = [];
+      const emp = this.state.employees.find(e => 
+        this.isRecordForActiveBusiness(e) && !e.isDeleted &&
+        (e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase()))
+      );
+      if (emp) {
+        emp.permissions = { ...(emp.permissions || {}), ...permissions };
+        this.saveState();
+        return true;
+      }
+      return false;
+    }
+
+    deleteEmployee(empIdOrName) {
+      if (!this.state.employees) return false;
+      const emp = this.state.employees.find(e => 
+        this.isRecordForActiveBusiness(e) && !e.isDeleted &&
+        (e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase()))
+      );
+      if (emp) {
+        emp.isDeleted = true;
+        emp.deletedAt = new Date().toISOString();
+        this.logAudit('EMPLOYEE_DELETED', 'Employee', emp.id, `Deleted staff member ${emp.name}`);
+        this.saveState();
+        return true;
+      }
+      return false;
+    }
+
+    resetEmployeePermissions(empIdOrName) {
+      if (!this.state.employees) return false;
+      const emp = this.state.employees.find(e => 
+        this.isRecordForActiveBusiness(e) && !e.isDeleted &&
+        (e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase()))
+      );
+      if (emp) {
+        emp.permissions = {};
+        this.saveState();
+        return true;
+      }
+      return false;
     }
 
     checkPermission(action) {
       const role = this.getCurrentUserRole();
+      const session = this.state.currentSession;
+
+      // Primary Owner always has full access
+      if (role === 'OWNER' || (session && session.user && session.user.name === 'Owner')) return true;
+
+      const currentEmp = this.getCurrentEmployee();
+
+      // Custom permission overrides per employee
+      if (currentEmp && currentEmp.permissions) {
+        if (action === 'DELETE_TRANSACTIONS' || action === 'DELETE_TRANSACTION') {
+          if (currentEmp.permissions.deleteTransactions !== undefined) {
+            return Boolean(currentEmp.permissions.deleteTransactions);
+          }
+        }
+        if (action === 'VIEW_PNL' || action === 'VIEW_PROFIT' || action === 'VIEW_REPORTS') {
+          if (currentEmp.permissions.viewProfit !== undefined) {
+            return Boolean(currentEmp.permissions.viewProfit);
+          }
+        }
+        if (action === 'VIEW_BALANCES') {
+          if (currentEmp.permissions.viewBalances !== undefined) {
+            return Boolean(currentEmp.permissions.viewBalances);
+          }
+        }
+        if (action === 'RECEIVE_PAYMENT' || action === 'CREATE_KHATA') {
+          if (currentEmp.permissions.receivePayments !== undefined) {
+            return Boolean(currentEmp.permissions.receivePayments);
+          }
+        }
+      }
+
+      // Default Role Matrix
       const matrix = {
         OWNER: ['ALL'],
-        MANAGER: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_POS', 'CREATE_INVOICE', 'CREATE_PURCHASE', 'ADD_EXPENSE', 'MANAGE_INVENTORY', 'VIEW_REPORTS'],
-        ACCOUNTANT: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_INVOICE', 'ADD_EXPENSE', 'VIEW_REPORTS', 'VIEW_PNL'],
-        CASHIER: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'VIEW_INVENTORY']
+        MANAGER: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_POS', 'CREATE_INVOICE', 'CREATE_PURCHASE', 'ADD_EXPENSE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'DELETE_TRANSACTIONS', 'VIEW_BALANCES', 'RECEIVE_PAYMENT'],
+        ACCOUNTANT: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_INVOICE', 'ADD_EXPENSE', 'VIEW_REPORTS', 'VIEW_PNL', 'VIEW_PROFIT', 'VIEW_BALANCES', 'RECEIVE_PAYMENT'],
+        CASHIER: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
+        SALESMAN: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
+        'DELIVERY STAFF': ['VIEW_KHATA', 'RECEIVE_PAYMENT']
       };
 
-      const allowed = matrix[role] || [];
+      const allowed = matrix[role] || matrix['CASHIER'];
       if (allowed.includes('ALL') || allowed.includes(action)) return true;
       return false;
     }
@@ -933,6 +1044,14 @@
     // ─── SOFT DELETE ENGINE ───────────────────────────────────────────────────
     softDeleteRecord(entityType, recordId) {
       const bId = this.getActiveBusinessId();
+      
+      if (!this.checkPermission('DELETE_TRANSACTIONS')) {
+        if (window.iKhataUI && typeof window.iKhataUI.showToast === 'function') {
+          window.iKhataUI.showToast('🔒 Access Restricted: Record delete karne ke liye Owner/Manager permission chahiye!', 'error');
+        }
+        return false;
+      }
+
       let list = [];
       if (entityType === 'customer') list = this.state.customers;
       else if (entityType === 'product') list = this.state.products;
@@ -2202,6 +2321,17 @@
       };
 
       this.state.transactions.unshift(tx);
+
+      // Track sales & collections for active employee leaderboard
+      const activeEmp = this.getCurrentEmployee();
+      if (activeEmp) {
+        if (type === 'GAVE') {
+          activeEmp.sales = (activeEmp.sales || 0) + numAmount;
+        } else if (type === 'GOT') {
+          activeEmp.collections = (activeEmp.collections || 0) + numAmount;
+        }
+      }
+
       this.logAudit('KHATA_TRANSACTION', 'Customer', customer.id, `${type === 'GAVE' ? 'Gave' : 'Got'} ₹${numAmount} for ${customer.name}`);
       this.recalculateTotals();
       this.saveState();

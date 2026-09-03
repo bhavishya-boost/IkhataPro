@@ -4,6 +4,21 @@ window.iKhataAnalytics = {
   activeReport: 'SALES', // 'SALES', 'GST', 'CUSTOMERS', 'SUPPLIERS', 'EXPENSES'
 
   render(state) {
+    if (window.iKhataStore && typeof window.iKhataStore.checkPermission === 'function' && !window.iKhataStore.checkPermission('VIEW_REPORTS')) {
+      return `
+        <div class="card" style="text-align: center; padding: 48px 24px; max-width: 600px; margin: 40px auto;">
+          <div style="font-size: 3.5rem; margin-bottom: 12px;">🔒</div>
+          <h2 style="font-size: 1.5rem; margin-bottom: 8px;">Access Restricted (RBAC)</h2>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px;">
+            Unified Report Center viewing requires Manager, Accountant or Owner permissions.
+          </p>
+          <button class="btn btn-primary" onclick="window.iKhataPIN.requirePIN(() => window.iKhataUI.refresh(), 'Unlock Unified Reports')">
+            🔑 Unlock with Owner PIN
+          </button>
+        </div>
+      `;
+    }
+
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
     const bus = window.iKhataStore.getCurrentBusiness();
     const customers = window.iKhataStore.getCustomers();
