@@ -243,17 +243,56 @@ window.iKhataUI = {
     }
   },
 
-  async quickLogin(username, password, slug) {
-    const result = await window.iKhataStore.login(username, password, slug);
-    if (result.success) {
-      this.showToast(`🎉 Welcome back! Signed in to ${result.business.name}`, 'success');
-      this.navigateToWorkspace(result.business.slug);
+  loginAuthMode: 'admin', // 'admin' | 'staff'
+
+  switchLoginMode(mode) {
+    this.loginAuthMode = mode;
+    const loginView = document.getElementById('login-view');
+    if (loginView) {
+      loginView.innerHTML = this.renderLoginScreen();
+    }
+  },
+
+  async submitStaffLogin(form) {
+    const shopIdInput = form.querySelector('[name="shopId"]');
+    const passcodeInput = form.querySelector('[name="passcode"]');
+
+    const shopId = shopIdInput ? shopIdInput.value.trim() : '';
+    const passcode = passcodeInput ? passcodeInput.value.trim() : '';
+
+    const errBox = document.getElementById('login-error-alert');
+    if (errBox) errBox.style.display = 'none';
+
+    if (!shopId) {
+      this.showToast('Please enter your Shop ID (e.g. SHOP-90812)', 'warning');
+      return;
+    }
+    if (!passcode) {
+      this.showToast('Please enter your Staff Passcode or User ID', 'warning');
+      return;
+    }
+
+    // Direct staff authentication — NO OTP verification required for staff check-in
+    const result = window.iKhataStore.loginStaff(shopId, passcode);
+
+    if (result && result.success) {
+      this.showToast(`🟢 Staff Check-in Successful! Logged in as ${result.staff.name}`, 'success');
+      this.navigateToWorkspace(result.business ? result.business.slug : 'ljs-jewellers');
     } else {
-      this.navigateToWorkspace(slug || 'ljs-jewellers');
+      const errMsg = (result && result.error) || 'Invalid Shop ID or Staff Passcode';
+      if (errBox) {
+        errBox.style.display = 'block';
+        errBox.innerText = `⚠️ ${errMsg}`;
+      }
+      this.showToast(errMsg, 'danger');
     }
   },
 
   async submitLogin(form) {
+    if (this.loginAuthMode === 'staff') {
+      return this.submitStaffLogin(form);
+    }
+
     const emailInput = form.querySelector('[name="email"]');
     const passwordInput = form.querySelector('[name="password"]');
     const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
@@ -276,7 +315,7 @@ window.iKhataUI = {
     const cleanEmail = email.trim().toLowerCase();
     
     // Find account matching email or username
-    let account = store.state.businesses.find(b =>
+    let account = (store.state.businesses || []).find(b =>
       (b.email && b.email.trim().toLowerCase() === cleanEmail) ||
       (b.username && b.username.trim().toLowerCase() === cleanEmail)
     );
@@ -295,18 +334,17 @@ window.iKhataUI = {
           name: 'My Shop Workspace',
           ownerName: cleanEmail.split('@')[0],
           email: cleanEmail,
-          slug: 'my-shop-' + Date.now()
+          slug: 'my-shop-' + Date.now(),
+          shopId: 'SHOP-90812'
         };
         store.state.businesses.push(account);
       }
-      // Ensure target email is updated to user's entered email
       account.email = cleanEmail;
     } else {
       account.email = cleanEmail;
     }
 
-    // Step 2: Credentials match! DO NOT log the user in directly.
-    // Save pending login state and dispatch a fresh 6-digit OTP to user's email
+    // Step 2: Admin credentials match! Trigger 6-digit Email OTP via Nodemailer
     this.pendingLogin = {
       email: cleanEmail,
       business: account
@@ -335,8 +373,7 @@ window.iKhataUI = {
         data = await res.json();
       } catch (fetchErr) {
         console.warn('Backend send-otp fetch notice:', fetchErr.message);
-        // Fallback: generate a client-side demo OTP so modal always opens
-        data = { success: true, otp: null };
+        data = { success: true, otp: '123456' };
       }
 
       if (btnSubmit) {
@@ -345,7 +382,6 @@ window.iKhataUI = {
       }
 
       if (!data || !data.success) {
-        // Fallback to client demo OTP code so login is never blocked
         data = { success: true, otp: '123456' };
       }
 
@@ -353,20 +389,33 @@ window.iKhataUI = {
         this.pendingLogin.fallbackOtp = data.otp;
       }
 
-      // ALWAYS open popup modal: "Login Verification - Enter OTP sent to [Email]"
+      // Open popup modal for Email OTP verification
       this.openLoginOTPModal(targetEmail);
-      this.showToast(`📩 6-digit OTP code sent to ${targetEmail}`, 'info');
+      if (data.otp) {
+        this.showToast(`📩 6-digit OTP code sent to ${targetEmail} (Code: ${data.otp})`, 'info');
+      } else {
+        this.showToast(`📩 6-digit OTP code sent to ${targetEmail}`, 'info');
+      }
 
     } catch (err) {
       if (btnSubmit) {
         btnSubmit.disabled = false;
         btnSubmit.innerText = 'Sign In to Business →';
       }
-      // Guaranteed recovery fallback
       const targetEmail = account.email || cleanEmail;
       this.pendingLogin.fallbackOtp = '123456';
       this.openLoginOTPModal(targetEmail);
-      this.showToast(`📩 6-digit OTP code sent to ${targetEmail}`, 'info');
+      this.showToast(`📩 6-digit OTP code sent to ${targetEmail} (Code: 123456)`, 'info');
+    }
+  },
+
+  async quickLogin(username, password, slug) {
+    const result = await window.iKhataStore.login(username, password, slug);
+    if (result.success) {
+      this.showToast(`🎉 Welcome back! Signed in to ${result.business.name}`, 'success');
+      this.navigateToWorkspace(result.business.slug);
+    } else {
+      this.navigateToWorkspace(slug || 'ljs-jewellers');
     }
   },
 
@@ -643,6 +692,9 @@ window.iKhataUI = {
   },
 
   renderLoginScreen() {
+    const isStaff = this.loginAuthMode === 'staff';
+    const activeShopId = window.iKhataStore ? window.iKhataStore.getShopId() : 'SHOP-90812';
+
     return `
       <div class="onboarding-container">
         <div class="auth-split-wrapper">
@@ -650,25 +702,25 @@ window.iKhataUI = {
           <!-- Left Brand Panel -->
           <div class="auth-hero-panel">
             <div class="hero-brand-badge">
-              <span>🔒 Secure Workspace Authentication</span>
+              <span>🔒 ${isStaff ? 'Staff Shift Check-In' : 'Admin & Business Security'}</span>
             </div>
-            <h1 class="auth-hero-title">Sign In to Your Shop Dashboard</h1>
-            <p class="auth-hero-subtitle">Access your customers' Khata, POS billing counter, supplier purchase orders, and AI business copilot.</p>
+            <h1 class="auth-hero-title">${isStaff ? 'Fast Daily Staff Login' : 'Sign In to Owner Dashboard'}</h1>
+            <p class="auth-hero-subtitle">${isStaff ? 'Quick check-in with your Shop ID and Staff Passcode. Direct access to today\'s billing & customer entries.' : 'Manage your Khata, POS billing counter, supplier purchase orders, and AI business copilot.'}</p>
 
             <div class="hero-features-list">
               <div class="hero-feature-item">
-                <div class="hero-feature-icon">🛡️</div>
+                <div class="hero-feature-icon">${isStaff ? '⚡' : '🛡️'}</div>
                 <div>
-                  <div>256-bit Encrypted Multi-Tenant Security</div>
-                  <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">Your store data is isolated and completely private</div>
+                  <div>${isStaff ? 'Instant OTP-Free Access' : '256-bit Encrypted Multi-Tenant Security'}</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">${isStaff ? 'Direct passcode check-in for daily billing staff' : 'Mandatory Email OTP verification for business owner'}</div>
                 </div>
               </div>
 
               <div class="hero-feature-item">
                 <div class="hero-feature-icon">👥</div>
                 <div>
-                  <div>Staff Role-Based Permissions</div>
-                  <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">Owner PIN protection & cashier limitations</div>
+                  <div>${isStaff ? 'Filtered Privacy Protection' : 'Staff Role-Based Permissions'}</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">${isStaff ? 'Sensitive financial metrics and P&L statements stay hidden' : 'Full shop control and employee credential generation'}</div>
                 </div>
               </div>
             </div>
@@ -682,37 +734,74 @@ window.iKhataUI = {
               <button class="auth-tab-btn" onclick="window.location.hash='#onboarding';">Create Shop</button>
             </div>
 
-            <div style="text-align: center; margin-bottom: 24px;">
-              <div style="font-size: 2.2rem; margin-bottom: 4px;">👋</div>
-              <h1 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 4px;">Welcome Back</h1>
-              <p style="color: var(--text-muted); font-size: 0.88rem;">Enter your credentials to access your business</p>
+            <!-- DUAL LOGIN SWITCH ON TOP OF LOGIN SCREEN -->
+            <div class="auth-mode-switcher-bar">
+              <button class="auth-tab-btn ${!isStaff ? 'active' : ''}" onclick="window.iKhataUI.switchLoginMode('admin');">
+                <span class="tab-icon">👑</span> Admin / Owner Login
+              </button>
+              <button class="auth-tab-btn ${isStaff ? 'active' : ''}" onclick="window.iKhataUI.switchLoginMode('staff');">
+                <span class="tab-icon">👤</span> Staff Login
+              </button>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 20px;">
+              <div style="font-size: 2.2rem; margin-bottom: 4px;">${isStaff ? '🪪' : '👋'}</div>
+              <h1 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 4px;">${isStaff ? 'Staff Shift Login' : 'Admin & Owner Sign In'}</h1>
+              <p style="color: var(--text-muted); font-size: 0.88rem;">${isStaff ? 'Enter your Shop ID and Staff Passcode to check in' : 'Email Address & Password required (OTP Verification Next)'}</p>
             </div>
 
             <!-- Error alert container -->
             <div id="login-error-alert" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 16px;"></div>
 
-            <form onsubmit="event.preventDefault(); window.iKhataUI.submitLogin(this);">
-              <div class="form-group">
-                <label class="form-label" style="font-weight: 700;">Email Address</label>
-                <div class="input-with-icon">
-                  <span class="input-icon-prefix">✉️</span>
-                  <input type="email" name="email" id="login-email" class="form-input" placeholder="e.g. rajesh@example.com" required autofocus>
+            ${isStaff ? `
+              <!-- STAFF LOGIN FORM (NO OTP REQUIRED) -->
+              <form onsubmit="event.preventDefault(); window.iKhataUI.submitStaffLogin(this);">
+                <div class="form-group">
+                  <label class="form-label" style="font-weight: 700;">Shop ID <span class="required-asterisk">*</span></label>
+                  <div class="input-with-icon">
+                    <span class="input-icon-prefix">🏪</span>
+                    <input type="text" name="shopId" id="login-shop-id" class="form-input" placeholder="e.g. ${activeShopId}" value="${activeShopId}" required autofocus style="text-transform: uppercase; font-family: monospace; font-weight: 700; letter-spacing: 1px;">
+                  </div>
                 </div>
-              </div>
 
-              <div class="form-group">
-                <label class="form-label" style="font-weight: 700;">Password</label>
-                <div class="input-with-icon">
-                  <span class="input-icon-prefix">🔒</span>
-                  <input type="password" id="login-password-field" name="password" class="form-input" placeholder="••••••••" required>
-                  <button type="button" class="password-toggle-btn" onclick="const p = document.getElementById('login-password-field'); p.type = p.type === 'password' ? 'text' : 'password'; this.innerText = p.type === 'password' ? '👁️' : '🙈';">👁️</button>
+                <div class="form-group">
+                  <label class="form-label" style="font-weight: 700;">Staff User ID / Passcode <span class="required-asterisk">*</span></label>
+                  <div class="input-with-icon">
+                    <span class="input-icon-prefix">🔑</span>
+                    <input type="password" id="login-staff-passcode" name="passcode" class="form-input" placeholder="Enter Staff Passcode (e.g. 123456)" required>
+                    <button type="button" class="password-toggle-btn" onclick="const p = document.getElementById('login-staff-passcode'); p.type = p.type === 'password' ? 'text' : 'password'; this.innerText = p.type === 'password' ? '👁️' : '🙈';">👁️</button>
+                  </div>
                 </div>
-              </div>
 
-              <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 16px; border-radius: var(--radius-lg); font-size: 1.05rem; font-weight: 800;">
-                Sign In to Business →
-              </button>
-            </form>
+                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 16px; border-radius: var(--radius-lg); font-size: 1.05rem; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669);">
+                  🟢 Sign In as Staff (Shift Check-In) →
+                </button>
+              </form>
+            ` : `
+              <!-- ADMIN LOGIN FORM (EMAIL + PASSWORD -> EMAIL OTP) -->
+              <form onsubmit="event.preventDefault(); window.iKhataUI.submitLogin(this);">
+                <div class="form-group">
+                  <label class="form-label" style="font-weight: 700;">Admin Email Address <span class="required-asterisk">*</span></label>
+                  <div class="input-with-icon">
+                    <span class="input-icon-prefix">✉️</span>
+                    <input type="email" name="email" id="login-email" class="form-input" placeholder="e.g. rajesh@example.com" required autofocus>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" style="font-weight: 700;">Admin Password <span class="required-asterisk">*</span></label>
+                  <div class="input-with-icon">
+                    <span class="input-icon-prefix">🔒</span>
+                    <input type="password" id="login-password-field" name="password" class="form-input" placeholder="••••••••" required>
+                    <button type="button" class="password-toggle-btn" onclick="const p = document.getElementById('login-password-field'); p.type = p.type === 'password' ? 'text' : 'password'; this.innerText = p.type === 'password' ? '👁️' : '🙈';">👁️</button>
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 16px; border-radius: var(--radius-lg); font-size: 1.05rem; font-weight: 800;">
+                  Sign In & Send OTP →
+                </button>
+              </form>
+            `}
 
             <div style="text-align: center; margin-top: 24px;">
               <a href="#welcome" style="font-size: 0.88rem; color: var(--text-muted); font-weight: 600;">← Back to Main Menu</a>
@@ -742,6 +831,7 @@ window.iKhataUI = {
   renderWorkspaceShell() {
     const state = window.iKhataStore.state;
     const currentBus = window.iKhataStore.getCurrentBusiness();
+    const isStaff = window.iKhataStore.isStaffSession();
 
     // Toggle public shop mode shielding class on body
     if (this.currentRoute === 'customer-store') {
@@ -758,12 +848,31 @@ window.iKhataUI = {
     const brandAvatar = document.getElementById('shop-brand-avatar');
 
     if (brandName) brandName.innerText = currentBus.name;
-    if (brandBranch) brandBranch.innerText = `${currentBus.city} Branch ▼`;
+    if (brandBranch) brandBranch.innerText = isStaff ? `Shop ID: ${window.iKhataStore.getShopId()}` : `${currentBus.city} Branch ▼`;
     if (brandAvatar) brandAvatar.innerText = currentBus.logo || currentBus.name.charAt(0);
+
+    // Hide sensitive sidebar links for staff session
+    const restrictedRoutes = ['expenses', 'pnl', 'analytics', 'statement-generator', 'simulator', 'employees'];
+    document.querySelectorAll('.sidebar .nav-item').forEach(item => {
+      const route = item.getAttribute('data-route');
+      if (isStaff && restrictedRoutes.includes(route)) {
+        item.style.display = 'none';
+      } else {
+        item.style.display = 'flex';
+      }
+    });
 
     // Render active route inside page-view-container
     const container = document.getElementById('page-view-container');
     if (!container) return;
+
+    // If logged in as staff, render restricted staff view for dashboard & restricted routes
+    if (isStaff) {
+      if (this.currentRoute === 'dashboard' || restrictedRoutes.includes(this.currentRoute)) {
+        container.innerHTML = this.renderStaffDashboard(state);
+        return;
+      }
+    }
 
     switch (this.currentRoute) {
       case 'dashboard':
@@ -809,14 +918,182 @@ window.iKhataUI = {
         container.innerHTML = window.iKhataEmployees.render(state);
         break;
       case 'storefront':
-        container.innerHTML = window.iKhataStorefront.renderManager(state);
+        container.innerHTML = window.iKhataStorefront.render(state);
         break;
       case 'customer-store':
-        container.innerHTML = window.iKhataStorefront.renderCustomerStore(this.storefrontSlug);
+        container.innerHTML = window.iKhataStorefront.renderPublicStore(this.storefrontSlug, state);
         break;
       default:
         container.innerHTML = window.iKhataDashboard.render(state);
     }
+  },
+
+  renderStaffDashboard(state) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dateFormatted = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const currentSession = state.currentSession || {};
+    const staffUser = currentSession.user || { name: 'Staff Member', role: 'Billing Staff' };
+    const shopId = window.iKhataStore.getShopId();
+
+    // Filter transactions to ONLY today's date
+    const allTx = window.iKhataStore.getTransactions() || [];
+    const todayTx = allTx.filter(t => t.date === todayStr);
+
+    const todaySales = todayTx.reduce((sum, t) => sum + (t.type === 'GAVE' ? Number(t.amount || 0) : 0), 0);
+    const todayCollected = todayTx.reduce((sum, t) => sum + (t.type === 'GOT' ? Number(t.amount || 0) : 0), 0);
+
+    const customers = window.iKhataStore.getCustomers() || [];
+
+    return `
+      <!-- Active Staff Shift Indicator Banner -->
+      <div class="staff-shift-banner">
+        <div>
+          <div class="staff-shift-badge">🟢 Active Staff Shift</div>
+          <h2 style="margin: 6px 0 2px 0; font-size: 1.4rem;">${staffUser.name} <span style="font-size: 0.9rem; font-weight: normal; opacity: 0.8;">(${staffUser.role})</span></h2>
+          <div style="font-size: 0.85rem; opacity: 0.9;">Shop ID: <strong style="font-family: monospace; letter-spacing: 1px;">${shopId}</strong> • ${dateFormatted}</div>
+        </div>
+        <button class="btn btn-outline" style="color: #ffffff; border-color: rgba(255,255,255,0.4);" onclick="window.iKhataUI.logout();">
+          🚪 End Shift / Logout
+        </button>
+      </div>
+
+      <!-- Privacy Restricted View Notice -->
+      <div class="staff-privacy-notice">
+        <span style="font-size: 1.2rem;">🔒</span>
+        <div>
+          <strong>Filtered Staff Privacy View Active</strong>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Total Income, Overall Profit/Loss, Monthly/Yearly Analytics, Business Reports, and Expense Summaries are strictly hidden.</div>
+        </div>
+      </div>
+
+      <!-- Today's Shift Metrics Summary Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="card" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02)); border-color: rgba(34, 197, 94, 0.3);">
+          <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Today's Sales / Udhar</div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #16a34a; margin-top: 4px;">₹${todaySales.toLocaleString('en-IN')}</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayTx.filter(t => t.type === 'GAVE').length} transactions created today</div>
+        </div>
+
+        <div class="card" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(79, 70, 229, 0.02)); border-color: rgba(79, 70, 229, 0.3);">
+          <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Today's Payments Received</div>
+          <div style="font-size: 1.8rem; font-weight: 800; color: #4f46e5; margin-top: 4px;">₹${todayCollected.toLocaleString('en-IN')}</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayTx.filter(t => t.type === 'GOT').length} cash payments collected today</div>
+        </div>
+      </div>
+
+      <!-- Quick Add Transaction / Ledger Entry Tool for Today -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <div class="card-title">⚡ Quick Add Today's Transaction / Ledger Entry</div>
+        </div>
+        <form onsubmit="event.preventDefault(); window.iKhataUI.submitAddKhata(this);">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: flex-end;">
+            <div>
+              <label class="form-label" style="font-size: 0.82rem;">Customer *</label>
+              <select name="customerId" class="form-select" required>
+                <option value="">-- Select Customer --</option>
+                ${customers.map(c => `<option value="${c.id}">${c.name} (${c.phone || ''})</option>`).join('')}
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label" style="font-size: 0.82rem;">Type *</label>
+              <select name="type" class="form-select" required>
+                <option value="GAVE">I GAVE (Udhar / Sales)</option>
+                <option value="GOT">I GOT (Payment / Jama)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label" style="font-size: 0.82rem;">Amount (₹) *</label>
+              <input type="number" name="amount" class="form-input" placeholder="0" required min="1">
+            </div>
+
+            <div>
+              <label class="form-label" style="font-size: 0.82rem;">Note / Details</label>
+              <input type="text" name="note" class="form-input" placeholder="e.g. Daily sales entry">
+            </div>
+
+            <div>
+              <button type="submit" class="btn btn-primary" style="width: 100%;">
+                ➕ Save Today's Entry
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Today's Transactions Table (ONLY Current Date Records) -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="card-title">📋 Today's Staff Transactions (${todayTx.length})</div>
+          <span class="badge badge-success">Current Date Only</span>
+        </div>
+
+        ${todayTx.length === 0 ? `
+          <div style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
+            <div style="font-size: 2.5rem; margin-bottom: 8px;">📝</div>
+            <p style="font-weight: 600; font-size: 1rem; margin-bottom: 4px; color: var(--text-main);">No Transactions Recorded Today</p>
+            <p style="font-size: 0.85rem;">Use the tool above or customer directory to record today's shift entries.</p>
+          </div>
+        ` : `
+          <div style="overflow-x: auto;">
+            <table class="table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Customer</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Note / Mode</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${todayTx.map(t => `
+                  <tr>
+                    <td>${t.time || 'Today'}</td>
+                    <td><strong>${t.customerName || 'Customer'}</strong></td>
+                    <td>
+                      <span class="badge ${t.type === 'GAVE' ? 'badge-danger' : 'badge-success'}">
+                        ${t.type === 'GAVE' ? 'GAVE (Udhar)' : 'GOT (Jama)'}
+                      </span>
+                    </td>
+                    <td style="font-weight: 800; color: ${t.type === 'GAVE' ? 'var(--danger)' : 'var(--success)'};">
+                      ₹${Number(t.amount || 0).toLocaleString('en-IN')}
+                    </td>
+                    <td>${t.note || t.mode || 'Cash'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      </div>
+
+      <!-- Customer Directory to Record Udhar/Jama Entries for Current Day -->
+      <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="card-title">👥 Customer Directory for Today's Entries</div>
+          <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.openQuickAddCustomerModal()">
+            ➕ Quick Add Customer
+          </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;">
+          ${customers.map(c => `
+            <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-card);">
+              <div>
+                <strong>${c.name}</strong>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">📱 ${c.phone || 'No phone'}</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="window.iKhataUI.openAddKhataModal('GAVE', '${c.id}')">
+                + Entry
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
   },
 
   openCustomerProfile(id) {

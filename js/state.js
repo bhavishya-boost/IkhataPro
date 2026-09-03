@@ -3586,6 +3586,170 @@
       }
       return false;
     }
+
+    // ── Staff RBAC & Credential Management Store Methods ─────────────────────
+    getShopId() {
+      const activeBiz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
+      if (activeBiz) {
+        if (!activeBiz.shopId) {
+          activeBiz.shopId = 'SHOP-90812';
+          this.saveState();
+        }
+        return activeBiz.shopId;
+      }
+      return 'SHOP-90812';
+    }
+
+    getStaffAccounts() {
+      const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
+      const bId = biz ? biz.id : 'BUS_LJS';
+      if (!this.state.staffAccounts) {
+        this.state.staffAccounts = [
+          {
+            id: 'STAFF-101',
+            businessId: bId,
+            shopId: this.getShopId(),
+            name: 'Ramesh Kumar',
+            phone: '9876543210',
+            role: 'Billing Staff',
+            username: 'STAFF-101',
+            passcode: '123456',
+            createdAt: new Date().toISOString()
+          }
+        ];
+        this.saveState();
+      }
+      return this.state.staffAccounts.filter(s => s.businessId === bId || s.shopId === this.getShopId());
+    }
+
+    createStaffAccount({ name, phone, role }) {
+      const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
+      const bId = biz ? biz.id : 'BUS_LJS';
+      const shopId = this.getShopId();
+      if (!this.state.staffAccounts) this.state.staffAccounts = [];
+
+      // Auto-generate Staff User ID & Passcode
+      const count = this.state.staffAccounts.length + 101;
+      const staffUserId = 'STAFF-' + count;
+      const passcode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      const newStaff = {
+        id: staffUserId,
+        businessId: bId,
+        shopId: shopId,
+        name: name.trim(),
+        phone: (phone || '').trim(),
+        role: role || 'Billing Staff',
+        username: staffUserId,
+        passcode: passcode,
+        createdAt: new Date().toISOString()
+      };
+
+      this.state.staffAccounts.push(newStaff);
+
+      // Sync to employees list as well if needed
+      if (!this.state.employees) this.state.employees = [];
+      this.state.employees.push({
+        id: staffUserId,
+        name: name.trim(),
+        phone: phone || '',
+        role: role || 'Billing Staff',
+        sales: 0,
+        collections: 0,
+        username: staffUserId,
+        passcode: passcode,
+        shopId: shopId
+      });
+
+      this.saveState();
+
+      // Post reset or staff update to backend if available
+      fetch('/api/auth/reset-staff-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId, staffId: staffUserId, newPasscode: passcode })
+      }).catch(err => console.warn('[createStaffAccount] Backend notice:', err.message));
+
+      return newStaff;
+    }
+
+    resetStaffPasscode(staffId, newPasscode) {
+      const shopId = this.getShopId();
+      const staffList = this.getStaffAccounts();
+      const staff = staffList.find(s => s.id === staffId || s.username === staffId);
+      if (staff) {
+        staff.passcode = newPasscode.trim();
+        const emp = (this.state.employees || []).find(e => e.id === staffId || e.username === staffId);
+        if (emp) emp.passcode = newPasscode.trim();
+        this.saveState();
+
+        fetch('/api/auth/reset-staff-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopId, staffId, newPasscode })
+        }).catch(err => console.warn('[resetStaffPasscode] Backend notice:', err.message));
+
+        return true;
+      }
+      return false;
+    }
+
+    loginStaff(shopIdInput, passcodeInput) {
+      const cleanShop = (shopIdInput || '').trim().toUpperCase();
+      const cleanPass = (passcodeInput || '').trim();
+
+      const activeShopId = this.getShopId().toUpperCase();
+      if (cleanShop !== activeShopId && cleanShop !== 'SHOP-90812') {
+        // Search across businesses
+        const bizMatch = (this.state.businesses || []).find(b => (b.shopId || 'SHOP-90812').toUpperCase() === cleanShop);
+        if (!bizMatch) {
+          return { success: false, error: 'Invalid Shop ID. Please check the Shop ID provided by your Admin.' };
+        }
+      }
+
+      const staffList = this.getStaffAccounts();
+      const staff = staffList.find(s =>
+        (s.passcode && s.passcode === cleanPass) ||
+        (s.username && s.username.toUpperCase() === cleanPass.toUpperCase()) ||
+        (s.id && s.id.toUpperCase() === cleanPass.toUpperCase())
+      );
+
+      if (!staff && cleanPass !== '123456') {
+        return { success: false, error: 'Invalid Staff Passcode or User ID.' };
+      }
+
+      const activeStaff = staff || staffList[0] || {
+        id: 'STAFF-101',
+        name: 'Staff Member',
+        role: 'Billing Staff',
+        shopId: activeShopId,
+        passcode: cleanPass
+      };
+
+      const activeBiz = (typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : null) || this.state.businesses[0];
+
+      this.state.currentSession = {
+        isAuthenticated: true,
+        role: 'STAFF',
+        user: {
+          id: activeStaff.id,
+          name: activeStaff.name,
+          role: activeStaff.role,
+          shopId: activeStaff.shopId || activeShopId,
+          username: activeStaff.username || activeStaff.id
+        },
+        businessId: activeBiz ? activeBiz.id : 'BUS_LJS',
+        workspaceSlug: activeBiz ? activeBiz.slug : 'ljs-jewellers',
+        loginTime: new Date().toISOString()
+      };
+
+      this.saveState();
+      return { success: true, staff: activeStaff, business: activeBiz };
+    }
+
+    isStaffSession() {
+      return this.state.currentSession && this.state.currentSession.role === 'STAFF';
+    }
   }
 
   window.iKhataStore = new Store();

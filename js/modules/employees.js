@@ -113,6 +113,10 @@ window.iKhataEmployees = {
                     ⚙️ Permissions
                   </button>
 
+                  <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.openResetPasswordModal('${empId}', '${emp.name}')">
+                    🔑 Reset Passcode
+                  </button>
+
                   <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: var(--danger);" onclick="window.iKhataEmployees.confirmDeleteEmployee('${empId}')" title="Delete Staff Member">
                     🗑️
                   </button>
@@ -257,28 +261,36 @@ window.iKhataEmployees = {
   },
 
   openAddEmployeeModal() {
-    window.iKhataUI.openModal('➕ Add New Employee', `
+    const shopId = window.iKhataStore ? window.iKhataStore.getShopId() : 'SHOP-90812';
+    window.iKhataUI.openModal('➕ Add New Staff Member', `
       <div style="display: flex; flex-direction: column; gap: 16px;">
-        <div>
-          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Employee Name *</label>
-          <input id="emp-name-input" type="text" placeholder="e.g. Rahul Kumar" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        <div style="background: rgba(79,70,229,0.08); padding: 12px; border-radius: 10px; border: 1px solid rgba(79,70,229,0.2);">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Assigned Business Shop ID</span>
+          <div style="font-weight: 800; font-size: 1.1rem; color: var(--primary); font-family: monospace;">${shopId}</div>
         </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Staff Name *</label>
+          <input id="emp-name-input" type="text" placeholder="e.g. Ramesh Kumar" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+
         <div>
           <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Phone Number *</label>
           <input id="emp-phone-input" type="tel" placeholder="e.g. 9876543210" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
         </div>
+
         <div>
-          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Role *</label>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Role / Designation *</label>
           <select id="emp-role-input" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box; background: var(--bg-card);">
-            <option value="Salesman">Salesman</option>
+            <option value="Billing Staff">Billing Staff</option>
+            <option value="Sales Executive">Sales Executive</option>
+            <option value="Store Manager">Store Manager</option>
             <option value="Accountant">Accountant</option>
-            <option value="Manager">Manager</option>
-            <option value="Owner">Owner</option>
-            <option value="Delivery Staff">Delivery Staff</option>
           </select>
         </div>
+
         <button class="btn btn-primary" style="margin-top: 4px; width: 100%;" onclick="window.iKhataEmployees.saveNewEmployee()">
-          ✅ Save Employee
+          ⚡ Create Staff & Generate Credentials
         </button>
       </div>
     `);
@@ -290,29 +302,97 @@ window.iKhataEmployees = {
     const role  = document.getElementById('emp-role-input')?.value;
 
     if (!name || !rawPhone) {
-      window.iKhataUI.showToast('❌ Naam aur phone number daalein!', 'error');
+      window.iKhataUI.showToast('❌ Please enter Staff Name and Phone Number!', 'error');
       return;
     }
     const cleanPhone = rawPhone.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
-      window.iKhataUI.showToast('❌ Valid 10-digit phone number daalein!', 'error');
+      window.iKhataUI.showToast('❌ Enter a valid 10-digit phone number!', 'error');
       return;
     }
 
-    const newEmp = { name, phone: cleanPhone, role, sales: 0, collections: 0 };
-
-    if (window.iKhataStore && typeof window.iKhataStore.addEmployee === 'function') {
-      window.iKhataStore.addEmployee(newEmp);
-    } else {
-      if (!window.iKhataStore.state.employees) window.iKhataStore.state.employees = [];
-      window.iKhataStore.state.employees.push(newEmp);
-      window.iKhataStore.saveState();
-    }
+    const createdStaff = window.iKhataStore.createStaffAccount({ name, phone: cleanPhone, role });
 
     window.iKhataUI.closeModal();
-    window.iKhataUI.showToast(`✅ ${name} saved successfully!`, 'success');
+    this.openStaffCredentialsModal(createdStaff);
     if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
       window.iKhataUI.refresh();
+    }
+  },
+
+  openStaffCredentialsModal(staff) {
+    const credText = `iKhataPro Staff Credentials:\nShop ID: ${staff.shopId}\nStaff User ID: ${staff.username || staff.id}\nPasscode: ${staff.passcode}\nStaff Name: ${staff.name}\nRole: ${staff.role}`;
+
+    window.iKhataUI.openModal('🎉 Staff Credentials Generated', `
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 2.5rem; margin-bottom: 4px;">🪪</div>
+        <h3 style="margin: 0; font-size: 1.25rem;">Staff Account Ready</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">Share these login credentials with ${staff.name}</p>
+      </div>
+
+      <div class="credentials-display-card">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.9rem;">
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;">Shop ID</div>
+            <div class="cred-chip">${staff.shopId}</div>
+          </div>
+
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;">Staff User ID</div>
+            <div class="cred-chip">${staff.username || staff.id}</div>
+          </div>
+
+          <div style="grid-column: span 2;">
+            <div style="color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;">Passcode / Password</div>
+            <div class="cred-chip" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; width: 100%; text-align: center; box-sizing: border-box;">${staff.passcode}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 16px;">
+        <button class="btn btn-outline" style="flex: 1;" onclick="navigator.clipboard.writeText(\`${credText}\`); window.iKhataUI.showToast('📋 Credentials copied to clipboard!', 'success');">
+          📋 Copy Credentials
+        </button>
+
+        <button class="btn btn-primary" style="flex: 1;" onclick="window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(\`${credText}\`), '_blank');">
+          💬 Share Credentials
+        </button>
+      </div>
+    `);
+  },
+
+  openResetPasswordModal(staffId, staffName) {
+    window.iKhataUI.openModal(`🔑 Reset Passcode: ${staffName}`, `
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <p style="font-size: 0.88rem; color: var(--text-muted);">Enter new 6-digit passcode or password for ${staffName}:</p>
+        <input id="new-staff-passcode-input" type="text" placeholder="Enter new passcode (e.g. 654321)" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: 1rem; outline: none; box-sizing: border-box;">
+
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+          <button class="btn btn-outline" style="flex: 1;" onclick="window.iKhataUI.closeModal();">Cancel</button>
+          <button class="btn btn-primary" style="flex: 1;" onclick="window.iKhataEmployees.submitPasscodeReset('${staffId}')">Save New Passcode</button>
+        </div>
+      </div>
+    `);
+  },
+
+  submitPasscodeReset(staffId) {
+    const input = document.getElementById('new-staff-passcode-input');
+    const newPass = input ? input.value.trim() : '';
+
+    if (!newPass || newPass.length < 4) {
+      window.iKhataUI.showToast('❌ Please enter a valid passcode (at least 4 digits)!', 'error');
+      return;
+    }
+
+    const success = window.iKhataStore.resetStaffPasscode(staffId, newPass);
+    if (success) {
+      window.iKhataUI.closeModal();
+      window.iKhataUI.showToast('✅ Staff passcode updated successfully!', 'success');
+      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+        window.iKhataUI.refresh();
+      }
+    } else {
+      window.iKhataUI.showToast('❌ Failed to update passcode.', 'error');
     }
   }
 };

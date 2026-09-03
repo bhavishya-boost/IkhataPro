@@ -109,7 +109,22 @@ app.patch('/api/orders/:id/status', (req, res) => {
   }
 });
 
-// ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
+// In-memory store for Staff Accounts: { [shopId]: [ { id, name, phone, role, username, passcode, createdAt } ] }
+const staffStore = {
+  'SHOP-90812': [
+    {
+      id: 'STAFF-101',
+      shopId: 'SHOP-90812',
+      name: 'Ramesh Kumar',
+      phone: '9876543210',
+      role: 'Billing Staff',
+      username: 'STAFF-101',
+      passcode: '123456',
+      createdAt: new Date().toISOString()
+    }
+  ]
+};
+
 // ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // 1. POST /api/auth/send-otp
 app.post('/api/auth/send-otp', async (req, res) => {
@@ -136,8 +151,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
           <p style="color: #666666; font-size: 14px; margin-top: 4px;">Digital Khata & Business Workspace</p>
         </div>
         <hr style="border: none; border-top: 1px solid #eeeeee; margin: 20px 0;" />
-        <h3 style="color: #333333; margin-bottom: 10px;">Email Verification Code</h3>
-        <p style="color: #555555; font-size: 14px; line-height: 1.5;">Your 6-digit One-Time Password (OTP) to verify your account or login is:</p>
+        <h3 style="color: #333333; margin-bottom: 10px;">Admin/Owner Email Verification Code</h3>
+        <p style="color: #555555; font-size: 14px; line-height: 1.5;">Your 6-digit One-Time Password (OTP) to log in as Admin / Owner is:</p>
         <div style="text-align: center; margin: 24px 0;">
           <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #4f46e5; background: #eef2ff; padding: 12px 24px; border-radius: 8px; display: inline-block;">${otp}</span>
         </div>
@@ -151,9 +166,9 @@ app.post('/api/auth/send-otp', async (req, res) => {
     let emailSent = false;
     try {
       const sendPromise = transporter.sendMail({
-        from: '"iKhataPro" <ethical0future@gmail.com>',
+        from: '"iKhataPro Security" <ethical0future@gmail.com>',
         to: cleanEmail,
-        subject: 'iKhataPro - Email Verification Code',
+        subject: 'iKhataPro Admin OTP Verification Code',
         html: htmlContent
       });
 
@@ -163,9 +178,9 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
       await Promise.race([sendPromise, timeoutPromise]);
       emailSent = true;
-      console.log(`[Email OTP] Successfully sent OTP ${otp} to ${cleanEmail}`);
+      console.log(`[Admin Email OTP] Successfully sent OTP ${otp} to ${cleanEmail}`);
     } catch (mailErr) {
-      console.warn(`[Email OTP] Nodemailer notice: ${mailErr.message}. Active OTP in memory: ${otp}`);
+      console.warn(`[Admin Email OTP] Nodemailer notice: ${mailErr.message}. Active OTP in memory: ${otp}`);
     }
 
     return res.status(200).json({
@@ -175,7 +190,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
       emailSent: emailSent
     });
   } catch (err) {
-    console.error('[Email OTP] Error generating OTP:', err.message);
+    console.error('[Admin Email OTP] Error generating OTP:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to process Email OTP: ' + err.message });
   }
 });
@@ -209,8 +224,63 @@ app.post('/api/auth/verify-otp', (req, res) => {
     delete emailOtpStore[cleanEmail];
     return res.status(200).json({ success: true, message: 'Email Verified Successfully' });
   } catch (err) {
-    console.error('[Email OTP] Error verifying OTP:', err.message);
+    console.error('[Admin Email OTP] Error verifying OTP:', err.message);
     return res.status(500).json({ success: false, error: 'Internal server error verifying OTP.' });
+  }
+});
+
+// ── Staff Authentication & Credential Management Endpoints ─────────────────────
+// 3. POST /api/auth/staff-login (Shop ID + Staff User ID / Passcode — NO OTP)
+app.post('/api/auth/staff-login', (req, res) => {
+  try {
+    const { shopId, staffUserId, passcode } = req.body;
+    if (!shopId || (!staffUserId && !passcode)) {
+      return res.status(400).json({ success: false, error: 'Shop ID and Staff Passcode are required.' });
+    }
+
+    const cleanShopId = shopId.trim().toUpperCase();
+    const cleanUserOrPass = (staffUserId || passcode || '').trim();
+    const cleanPass = (passcode || '').trim();
+
+    const shopStaffList = staffStore[cleanShopId] || [];
+    const staffMember = shopStaffList.find(s =>
+      (s.username && s.username.toUpperCase() === cleanUserOrPass.toUpperCase()) ||
+      (s.passcode && s.passcode === cleanPass) ||
+      (s.passcode && s.passcode === cleanUserOrPass)
+    );
+
+    if (staffMember) {
+      return res.status(200).json({
+        success: true,
+        message: 'Staff Authentication Successful',
+        staff: staffMember
+      });
+    }
+
+    return res.status(401).json({ success: false, error: 'Invalid Shop ID or Staff Passcode.' });
+  } catch (err) {
+    console.error('[Staff Login] Error:', err.message);
+    return res.status(500).json({ success: false, error: 'Internal server error during staff authentication.' });
+  }
+});
+
+// 4. POST /api/auth/reset-staff-password (Admin password reset for staff)
+app.post('/api/auth/reset-staff-password', (req, res) => {
+  try {
+    const { shopId, staffId, newPasscode } = req.body;
+    if (!shopId || !staffId || !newPasscode) {
+      return res.status(400).json({ success: false, error: 'Shop ID, Staff ID, and new passcode are required.' });
+    }
+    const cleanShopId = shopId.trim().toUpperCase();
+    const shopStaffList = staffStore[cleanShopId] || [];
+    const staff = shopStaffList.find(s => s.id === staffId || s.username === staffId);
+    if (staff) {
+      staff.passcode = newPasscode.trim();
+      return res.status(200).json({ success: true, message: 'Staff passcode updated successfully.', staff });
+    }
+    return res.status(404).json({ success: false, error: 'Staff account not found.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
