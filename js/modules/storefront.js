@@ -508,6 +508,7 @@ window.iKhataStorefront = {
     const total = cartSubtotal + deliveryFee;
 
     const order = window.iKhataStore.addOnlineOrder({
+      business_id: bus.id,
       customerName: data.get('customerName'),
       customerPhone: data.get('customerPhone'),
       address: data.get('address'),

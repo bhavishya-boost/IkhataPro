@@ -39,6 +39,76 @@ app.use('/api/transactions', transactionRoutes);
 // Dashboard summary shortcut route
 app.get('/api/dashboard/summary', getDashboardSummary);
 
+// ── In-memory Storefront Orders Store ──────────────────────────────────────────
+const onlineOrdersStore = [];
+
+// ── Online Storefront Orders Endpoints ──────────────────────────────────────────
+// 1. GET /api/orders (Optionally query by businessId or business_id)
+app.get('/api/orders', (req, res) => {
+  try {
+    const { businessId, business_id } = req.query;
+    const targetBus = businessId || business_id;
+    if (targetBus) {
+      const filtered = onlineOrdersStore.filter(o => (o.business_id === targetBus || o.businessId === targetBus) && !o.isDeleted);
+      return res.status(200).json({ success: true, count: filtered.length, data: filtered });
+    }
+    return res.status(200).json({ success: true, count: onlineOrdersStore.length, data: onlineOrdersStore });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. POST /api/orders (Create new storefront order)
+app.post('/api/orders', (req, res) => {
+  try {
+    const payload = req.body.order || req.body;
+    const orderData = {
+      id: payload.id || ('ORD-' + Math.floor(100000 + Math.random() * 900000)),
+      business_id: payload.business_id || payload.businessId || 'BUS_LJS',
+      customerId: payload.customerId || null,
+      customerName: payload.customerName || 'Guest Customer',
+      customerPhone: payload.customerPhone || '',
+      address: payload.address || '',
+      items: payload.items || [],
+      subtotal: Number(payload.subtotal || 0),
+      deliveryFee: Number(payload.deliveryFee || 0),
+      total: Number(payload.total || 0),
+      paymentMethod: payload.paymentMethod || 'WhatsApp',
+      status: payload.status || 'Pending',
+      createdAt: payload.createdAt || new Date().toISOString(),
+      isDeleted: false
+    };
+
+    // Avoid duplicate IDs
+    const existingIndex = onlineOrdersStore.findIndex(o => o.id === orderData.id);
+    if (existingIndex !== -1) {
+      onlineOrdersStore[existingIndex] = orderData;
+    } else {
+      onlineOrdersStore.unshift(orderData);
+    }
+    console.log(`[Online Orders] Order recorded: #${orderData.id} (Business: ${orderData.business_id})`);
+    return res.status(201).json({ success: true, message: 'Order created successfully', data: orderData });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. PATCH /api/orders/:id/status (Update status)
+app.patch('/api/orders/:id/status', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const existing = onlineOrdersStore.find(o => o.id === id);
+    if (existing) {
+      existing.status = status || existing.status;
+      return res.status(200).json({ success: true, message: 'Order status updated', data: existing });
+    }
+    return res.status(404).json({ success: false, error: 'Order not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // 1. POST /api/auth/send-otp

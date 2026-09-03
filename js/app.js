@@ -22,6 +22,13 @@ window.iKhataUI = {
     window.addEventListener('hashchange', () => {
       this.handleURLRouting();
     });
+
+    // Start background polling for online storefront orders (every 5s)
+    setInterval(() => {
+      if (window.iKhataStore && typeof window.iKhataStore.fetchOnlineOrders === 'function') {
+        window.iKhataStore.fetchOnlineOrders();
+      }
+    }, 5000);
   },
 
   initTheme() {
@@ -110,15 +117,19 @@ window.iKhataUI = {
       this.currentRoute = 'customer-store';
       this.currentView = 'workspace';
 
-      // Auto-login to business context silently for state access
+      // Auto-access business context for guest customer without overwriting active shop owner session
       const bus = window.iKhataStore.state.businesses.find(b => b.slug === slug);
       if (bus) {
-        window.iKhataStore.state.currentSession = {
-          isAuthenticated: true,
-          user: { name: 'Guest', username: 'guest' },
-          businessId: bus.id,
-          workspaceSlug: bus.slug
-        };
+        this.guestBusinessId = bus.id;
+        const activeSession = window.iKhataStore.state.currentSession;
+        if (!activeSession || !activeSession.isAuthenticated || activeSession.user?.username === 'guest') {
+          window.iKhataStore.state.currentSession = {
+            isAuthenticated: true,
+            user: { name: 'Guest', username: 'guest' },
+            businessId: bus.id,
+            workspaceSlug: bus.slug
+          };
+        }
       }
       this.refresh();
     } else if (hash.startsWith('#/app/')) {

@@ -106,6 +106,8 @@ window.iKhataPOS = {
     }
   },
 
+  loadedOnlineOrderId: null,
+
   openOnlineOrdersModal() {
     const orders = window.iKhataStore.getOnlineOrders();
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
@@ -166,6 +168,11 @@ window.iKhataPOS = {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
+    this.loadedOnlineOrderId = orderId;
+    if (order.customerId) {
+      this.selectedCustomer = order.customerId;
+    }
+
     this.cart = [];
     order.items.forEach(item => {
       this.cart.push({
@@ -180,6 +187,51 @@ window.iKhataPOS = {
     window.iKhataUI.closeModal();
     window.iKhataUI.showToast(`✓ Loaded Order #${orderId} into POS Cart!`, 'success');
     window.iKhataUI.refresh();
+  },
+
+  openBillsHistoryModal() {
+    const bills = window.iKhataStore.getBills();
+    const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
+
+    if (!bills || bills.length === 0) {
+      window.iKhataUI.openModal('🧾 Sales & Bills History', `
+        <div style="text-align: center; padding: 24px;">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">🧾</div>
+          <h3>No Bills Generated Yet</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Bills generated from POS and Storefront will appear here.</p>
+        </div>
+      `);
+      return;
+    }
+
+    window.iKhataUI.openModal('🧾 Sales & Bills History (' + bills.length + ')', `
+      <div style="display: grid; gap: 10px; max-height: 480px; overflow-y: auto;">
+        ${bills.map(b => `
+          <div style="padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-bg); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong>${b.id}</strong>
+                <span class="badge ${b.source === 'STOREFRONT' ? 'badge-warning' : 'badge-success'}">${b.source || 'POS'}</span>
+              </div>
+              <div style="font-size: 0.85rem; font-weight: 600; margin-top: 4px;">
+                👤 ${b.customerName || 'Walk-in Customer'}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                📅 ${b.date || ''} ${b.time || ''} • Pay: <strong>${b.paymentMethod || 'Cash'}</strong>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--primary);">
+                ${formatCurrency(b.grandTotal)}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                ${(b.items || []).length} Items
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `);
   },
 
   render(state) {
@@ -208,6 +260,9 @@ window.iKhataPOS = {
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-secondary btn-sm" onclick="window.iKhataPOS.openOnlineOrdersModal()">
             🛍️ Online Orders ${onlineOrdersCount > 0 ? `<span class="badge badge-warning" style="margin-left: 4px;">${onlineOrdersCount}</span>` : ''}
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="window.iKhataPOS.openBillsHistoryModal()">
+            🧾 Sales Bills History
           </button>
           <button class="btn btn-ai btn-sm" onclick="window.iKhataPOS.startVoicePOS()">
             🎙️ Voice POS Billing
@@ -328,6 +383,7 @@ window.iKhataPOS = {
 
     // Save bill to central store
     const bill = window.iKhataStore.savePOSBill({
+      orderId:       this.loadedOnlineOrderId || null,
       customerId:    this.selectedCustomer || null,
       customerName:  selectedCustObj ? selectedCustObj.name : 'Walk-in Customer',
       items:         this.cart,
@@ -337,6 +393,8 @@ window.iKhataPOS = {
       grandTotal:    grandTotal,
       paymentMethod: method
     });
+
+    this.loadedOnlineOrderId = null;
 
     // If credit/khata payment and customer selected, also log a khata entry
     if (method.includes('Credit') && this.selectedCustomer) {

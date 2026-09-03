@@ -137,6 +137,20 @@ window.iKhataIntelligence = {
     const pnl = window.iKhataStore.getFinancialPNL('THIS_MONTH');
     const prevPnl = window.iKhataStore.getFinancialPNL('ALL');
 
+    // 📦 Pending Online Storefront Orders
+    const pendingOrders = window.iKhataStore.getOnlineOrders().filter(o => o.status === 'Pending');
+    if (pendingOrders.length > 0) {
+      const pendingAmt = pendingOrders.reduce((s, o) => s + (o.total || 0), 0);
+      alerts.push({
+        priority: 'critical',
+        icon: '📦',
+        text: `${pendingOrders.length} new online customer order(s) pending review (₹${pendingAmt.toLocaleString('en-IN')}).`,
+        action: 'navigate',
+        actionLabel: 'View Orders',
+        route: 'storefront'
+      });
+    }
+
     // 🔴 Critical overdue customers
     const criticalOverdue = customers.filter(c => c.balance > 5000 && (c.daysSinceLastActivity||0) > 60);
     if (criticalOverdue.length > 0) {

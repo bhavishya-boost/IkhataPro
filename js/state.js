@@ -11,6 +11,73 @@
       this.purgeSampleDemoData();
       this.initSecurityDefaults();
       this.initCloudSync();
+      this.initCrossTabSync();
+    }
+
+    initCrossTabSync() {
+      if (typeof window === 'undefined') return;
+
+      if ('BroadcastChannel' in window) {
+        try {
+          this.orderChannel = new BroadcastChannel('ikhata_online_orders');
+          this.orderChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'NEW_ORDER') {
+              const newOrder = event.data.order;
+              if (newOrder && this.state.onlineOrders) {
+                const exists = this.state.onlineOrders.some(o => o.id === newOrder.id);
+                if (!exists) {
+                  this.state.onlineOrders.unshift(newOrder);
+                  this.notify();
+                }
+              }
+            } else if (event.data && event.data.type === 'REFRESH_ORDERS') {
+              this.fetchOnlineOrders();
+            }
+          };
+        } catch (e) {
+          console.warn('[CrossTabSync] BroadcastChannel notice:', e.message);
+        }
+      }
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY && e.newValue) {
+          try {
+            const fresh = JSON.parse(e.newValue);
+            if (fresh && Array.isArray(fresh.onlineOrders)) {
+              this.state.onlineOrders = fresh.onlineOrders;
+              this.notify();
+            }
+          } catch (err) {}
+        }
+      });
+
+      this.fetchOnlineOrders();
+    }
+
+    async fetchOnlineOrders() {
+      try {
+        const bId = this.getActiveBusinessId();
+        const url = `/api/orders${bId ? `?businessId=${encodeURIComponent(bId)}` : ''}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          if (!this.state.onlineOrders) this.state.onlineOrders = [];
+          let changed = false;
+          json.data.forEach(remoteOrder => {
+            const idx = this.state.onlineOrders.findIndex(o => o.id === remoteOrder.id);
+            if (idx !== -1) {
+              this.state.onlineOrders[idx] = { ...this.state.onlineOrders[idx], ...remoteOrder };
+            } else {
+              this.state.onlineOrders.unshift(remoteOrder);
+              changed = true;
+            }
+          });
+          if (changed) {
+            this.saveState();
+          }
+        }
+      } catch (err) {}
     }
 
     initCloudSync() {
@@ -3172,6 +3239,15 @@
       const bId = this.getActiveBusinessId();
       if (!this.state.bills) this.state.bills = [];
 
+      // If completing an existing online order, mark order completed & clean up draft storefront bill
+      if (data.orderId) {
+        this.updateOrderStatus(data.orderId, 'Completed');
+        const draftIdx = this.state.bills.findIndex(b => b.orderId === data.orderId || b.id === 'STORE-' + data.orderId);
+        if (draftIdx !== -1) {
+          this.state.bills.splice(draftIdx, 1);
+        }
+      }
+
       const today = new Date().toISOString().split('T')[0];
       const now   = new Date();
       const billNo = 'BILL-' + Date.now().toString().slice(-6);
@@ -3179,6 +3255,7 @@
       const bill = {
         id: billNo,
         business_id: bId,
+        orderId: data.orderId || null,
         customerId: data.customerId || null,
         customerName: this.escapeHTML(data.customerName || 'Walk-in Customer'),
         items: (data.items || []).map(i => ({ id: i.id, name: this.escapeHTML(i.name), price: i.price, qty: i.qty, total: i.price * i.qty })),
@@ -3187,31 +3264,34 @@
         discount: Math.round(data.discount || 0),
         grandTotal: Math.round(data.grandTotal || 0),
         paymentMethod: data.paymentMethod || 'Cash',
+        source: 'POS',
         date: today,
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: now.toISOString()
       };
 
-      // Inventory Stock Deduction Saga
-      const stockBackup = [];
-      try {
-        (bill.items || []).forEach(item => {
-          const prod = this.state.products.find(p => p.id === item.id && p.business_id === bId);
-          if (prod) {
-            stockBackup.push({ prod, origStock: prod.stock });
-            prod.stock = Math.max(0, prod.stock - item.qty);
-          }
-        });
-      } catch (err) {
-        // Rollback stock
-        stockBackup.forEach(b => { b.prod.stock = b.origStock; });
-        console.error('POS Bill stock deduction failed — rolled back state', err);
-        return null;
+      // Inventory Stock Deduction Saga (skip if already deducted for online order)
+      if (!data.orderId) {
+        const stockBackup = [];
+        try {
+          (bill.items || []).forEach(item => {
+            const prod = this.state.products.find(p => p.id === item.id && p.business_id === bId);
+            if (prod) {
+              stockBackup.push({ prod, origStock: prod.stock });
+              prod.stock = Math.max(0, prod.stock - item.qty);
+            }
+          });
+        } catch (err) {
+          // Rollback stock
+          stockBackup.forEach(b => { b.prod.stock = b.origStock; });
+          console.error('POS Bill stock deduction failed — rolled back state', err);
+          return null;
+        }
       }
 
       this.state.bills.unshift(bill);
 
-      if (data.paymentMethod === 'Credit' && data.customerId) {
+      if (data.paymentMethod && data.paymentMethod.includes('Credit') && data.customerId) {
         this.addKhataTransaction({
           customerId: data.customerId,
           type: 'GAVE',
@@ -3238,7 +3318,9 @@
               window.iKhataSupabase.syncPosBillItemsToCloud(res.posBill.id, bId, bill.items, this.state.productCloudMap || {});
             }
           }
-        }).catch(err => console.warn('POS bill background cloud sync warning:', err.message));
+        }).catch(err => {
+          console.warn('POS bill cloud sync skipped/failed:', err);
+        });
       }
 
       return bill;
@@ -3264,9 +3346,27 @@
     addOnlineOrder({ customerName, customerPhone, address, items, subtotal, deliveryFee, total, paymentMethod }) {
       const bId = this.getActiveBusinessId();
       if (!this.state.onlineOrders) this.state.onlineOrders = [];
+
+      // Auto-match existing customer by phone number if present
+      let matchedCust = null;
+      if (customerPhone) {
+        const cleanPhone = String(customerPhone).replace(/\D/g, '').slice(-10);
+        if (cleanPhone.length >= 10) {
+          matchedCust = this.getCustomers().find(c => {
+            const p = String(c.phone || '').replace(/\D/g, '').slice(-10);
+            return p === cleanPhone;
+          });
+        }
+      }
+      if (!matchedCust && customerName) {
+        matchedCust = this.getCustomers().find(c => c.name.trim().toLowerCase() === customerName.trim().toLowerCase());
+      }
+
+      const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
       const newOrder = {
-        id: 'ORD-' + Math.floor(100000 + Math.random() * 900000),
+        id: orderId,
         business_id: bId,
+        customerId: matchedCust ? matchedCust.id : null,
         customerName: customerName || 'Guest Customer',
         customerPhone: customerPhone || '',
         address: address || '',
@@ -3281,6 +3381,21 @@
       };
       this.state.onlineOrders.unshift(newOrder);
       this.saveState();
+
+      // Post order to Express backend server
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder)
+      }).catch(err => console.warn('[addOnlineOrder] Backend sync warning:', err.message));
+
+      // Broadcast order across browser tabs
+      if (this.orderChannel) {
+        try {
+          this.orderChannel.postMessage({ type: 'NEW_ORDER', order: newOrder });
+        } catch (e) {}
+      }
+
       return newOrder;
     }
 
@@ -3291,6 +3406,20 @@
       if (order) {
         order.status = status;
         this.saveState();
+
+        // Update status on server
+        fetch(`/api/orders/${orderId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        }).catch(err => console.warn('[updateOrderStatus] Server update warning:', err.message));
+
+        if (this.orderChannel) {
+          try {
+            this.orderChannel.postMessage({ type: 'REFRESH_ORDERS' });
+          } catch (e) {}
+        }
+
         return true;
       }
       return false;
