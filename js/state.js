@@ -10,6 +10,7 @@
       this.state = this.loadState();
       this.purgeSampleDemoData();
       this.initSecurityDefaults();
+      this.recalculateTotals();
       this.initCloudSync();
       this.initCrossTabSync();
     }
@@ -318,6 +319,10 @@
       const activeBId = this.getActiveBusinessId();
       const isDemoStore = !activeBId || activeBId === 'BUS_LJS' || activeBId === 'BUS_SHARMA';
 
+      if (isDemoStore) {
+        return; // Do not purge sample data when viewing demo stores (LJS / Sharma)
+      }
+
       const isSample = (name, id, sku, phone, recordBId, note = '', amount = 0) => {
         if (!isDemoStore) {
           const activeBizId = this.getActiveBusinessId();
@@ -473,30 +478,34 @@
       } catch (e) {
         console.error('Failed to load state from localStorage', e);
       }
-      if (!state) {
-        const isDemoHash = typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('demo');
-        const isNodeEnv = (typeof process !== 'undefined' && process.versions && process.versions.node);
-        const demoObj = (typeof window !== 'undefined' ? window.iKhataDemo : global.iKhataDemo);
-        if ((isDemoHash || isNodeEnv) && demoObj && typeof demoObj.getInitialState === 'function') {
-          state = demoObj.getInitialState();
-        } else {
-          state = {
-            businesses: [],
-            currentSession: { isAuthenticated: false, user: null, businessId: null, workspaceSlug: null },
-            customers: [],
-            products: [],
-            suppliers: [],
-            transactions: [],
-            expenses: [],
-            posBills: [],
-            invoices: [],
-            purchases: [],
-            employees: [],
-            auditLogs: [],
-            notifications: [],
-            onlineOrders: []
-          };
-        }
+      const demoObj = (typeof window !== 'undefined' ? window.iKhataDemo : global.iKhataDemo);
+      const isDemoWorkspace = !state || !state.currentSession || !state.currentSession.businessId || 
+                              state.currentSession.businessId === 'BUS_LJS' || state.currentSession.businessId === 'BUS_SHARMA';
+      const hasCustomers = state && Array.isArray(state.customers) && state.customers.length > 0;
+      const hasTransactions = state && Array.isArray(state.transactions) && state.transactions.length > 0;
+      const hasBusinesses = state && Array.isArray(state.businesses) && state.businesses.length > 0;
+
+      const needsDemoSeed = (!state || !hasBusinesses || (isDemoWorkspace && !hasCustomers && !hasTransactions));
+
+      if (needsDemoSeed && demoObj && typeof demoObj.getInitialState === 'function') {
+        state = demoObj.getInitialState();
+      } else if (!state) {
+        state = {
+          businesses: [],
+          currentSession: { isAuthenticated: false, user: null, businessId: null, workspaceSlug: null },
+          customers: [],
+          products: [],
+          suppliers: [],
+          transactions: [],
+          expenses: [],
+          posBills: [],
+          invoices: [],
+          purchases: [],
+          employees: [],
+          auditLogs: [],
+          notifications: [],
+          onlineOrders: []
+        };
       }
       if (state && Array.isArray(state.employees)) {
         // Remove old hardcoded demo employees
@@ -572,6 +581,34 @@
       }
       this.state = window.iKhataDemo.getInitialState();
       this.saveState();
+    }
+
+    clearAllDataAndStartFresh(force = false) {
+      if (!force) {
+        const confirmed = confirm("🧹 Are you sure you want to CLEAR ALL DEMO DATA and start fresh with 0 records?");
+        if (!confirmed) return false;
+      }
+      const bus = this.getCurrentBusiness();
+      this.state.customers = [];
+      this.state.products = [];
+      this.state.transactions = [];
+      this.state.posBills = [];
+      this.state.invoices = [];
+      this.state.expenses = [];
+      this.state.suppliers = [];
+      this.state.purchases = [];
+      this.state.auditLogs = [];
+
+      if (bus) {
+        bus.todaySales = 0;
+        bus.todayReceived = 0;
+        bus.toReceiveTotal = 0;
+        bus.toGiveTotal = 0;
+      }
+
+      this.recalculateTotals();
+      this.saveState();
+      return true;
     }
 
     // Active Tenant Identification
@@ -867,6 +904,12 @@
     getTransactions(includeDeleted = false) {
       if (!this.state.transactions) this.state.transactions = [];
       return this.state.transactions.filter(t => this.isRecordForActiveBusiness(t) && (includeDeleted || !t.isDeleted));
+    }
+
+    getBills(includeDeleted = false) {
+      if (!this.state.posBills && !this.state.bills) this.state.posBills = [];
+      const list = this.state.posBills || this.state.bills || [];
+      return list.filter(b => this.isRecordForActiveBusiness(b) && (includeDeleted || !b.isDeleted));
     }
 
     getInvoices(includeDeleted = false) {
@@ -1714,13 +1757,16 @@
       bus.toGiveTotal = Math.round((giveSum + totalSupplierPayable) * 100) / 100;
 
       const today = new Date().toISOString().split('T')[0];
-      const todayBills = this.getBills().filter(b => b.date === today);
+      const todayLocal = new Date().toLocaleDateString('en-CA');
+      const isToday = (dStr) => dStr === today || dStr === todayLocal;
+
+      const todayBills = this.getBills().filter(b => isToday(b.date));
       const todayTxReceived = this.getTransactions()
-        .filter(t => t.date === today && t.type === 'GOT' && !t.isDeleted)
+        .filter(t => isToday(t.date) && t.type === 'GOT' && !t.isDeleted)
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const billsSales = todayBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
-      const todayInvSales = this.getInvoices().filter(i => i.date === today).reduce((sum, i) => sum + (i.total || 0), 0);
+      const todayInvSales = this.getInvoices().filter(i => isToday(i.date)).reduce((sum, i) => sum + (i.total || 0), 0);
       const billsReceived = todayBills.filter(b => b.paymentMethod !== 'Credit').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
 
       bus.todaySales = Math.round((billsSales + todayInvSales) * 100) / 100;

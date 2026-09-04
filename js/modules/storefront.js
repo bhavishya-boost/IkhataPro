@@ -6,6 +6,14 @@ window.iKhataStorefront = {
   selectedCategory: 'ALL',
   viewMode: 'MANAGER', // 'MANAGER' or 'CUSTOMER'
 
+  render(state) {
+    return this.renderManager(state);
+  },
+
+  renderPublicStore(slug, state) {
+    return this.renderCustomerStore(slug, state);
+  },
+
   // --- MERCHANT DASHBOARD VIEW ---
   renderManager(state) {
     const bus = window.iKhataStore.getCurrentBusiness();

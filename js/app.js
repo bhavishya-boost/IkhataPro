@@ -2167,9 +2167,12 @@ window.iKhataUI = {
               </div>
             </div>
 
-            <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-              <button class="btn btn-danger btn-sm" style="width: 100%; justify-content: center;" onclick="window.iKhataStore.resetToDemoData(); window.iKhataUI.closeModal(); window.iKhataUI.refresh();">
-                ⚠️ Reset All Workspace Data to Seed Demo State
+            <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <button class="btn btn-warning btn-sm" style="width: 100%; justify-content: center;" onclick="if(window.iKhataStore.clearAllDataAndStartFresh()){ window.iKhataUI.closeModal(); window.iKhataUI.refresh(); window.iKhataUI.showToast('🧹 Cleared all demo data! Workspace is now 100% fresh with 0 records.', 'success'); }">
+                🧹 Clear Demo Data & Start Fresh (0 Records)
+              </button>
+              <button class="btn btn-outline btn-sm" style="width: 100%; justify-content: center; color: var(--danger); border-color: var(--danger);" onclick="window.iKhataStore.resetToDemoData(); window.iKhataUI.closeModal(); window.iKhataUI.refresh();">
+                🔄 Reset Workspace to Initial Demo Data
               </button>
             </div>
           </div>
