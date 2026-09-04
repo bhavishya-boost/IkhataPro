@@ -851,24 +851,42 @@ window.iKhataUI = {
     if (brandBranch) brandBranch.innerText = isStaff ? `Shop ID: ${window.iKhataStore.getShopId()}` : `${currentBus.city} Branch ▼`;
     if (brandAvatar) brandAvatar.innerText = currentBus.logo || currentBus.name.charAt(0);
 
-    // Hide sensitive sidebar links for staff session
-    const restrictedRoutes = ['expenses', 'pnl', 'analytics', 'statement-generator', 'simulator', 'employees'];
+    // Filter sidebar navigation links based on active staff role & permissions
     document.querySelectorAll('.sidebar .nav-item').forEach(item => {
       const route = item.getAttribute('data-route');
-      if (isStaff && restrictedRoutes.includes(route)) {
-        item.style.display = 'none';
-      } else {
-        item.style.display = 'flex';
+      if (!route) return;
+
+      let isAllowed = true;
+      if (isStaff) {
+        if (route === 'expenses') isAllowed = window.iKhataStore.checkPermission('VIEW_EXPENSES') || window.iKhataStore.checkPermission('ADD_EXPENSE');
+        else if (route === 'pnl') isAllowed = window.iKhataStore.checkPermission('VIEW_PNL') || window.iKhataStore.checkPermission('VIEW_PROFIT');
+        else if (route === 'analytics' || route === 'statement-generator' || route === 'simulator') isAllowed = window.iKhataStore.checkPermission('VIEW_REPORTS');
+        else if (route === 'employees') isAllowed = window.iKhataStore.checkPermission('MANAGE_EMPLOYEES');
+        else if (route === 'invoices') isAllowed = window.iKhataStore.checkPermission('CREATE_INVOICE') || window.iKhataStore.checkPermission('VIEW_REPORTS');
+        else if (route === 'suppliers') isAllowed = window.iKhataStore.checkPermission('CREATE_PURCHASE') || window.iKhataStore.checkPermission('VIEW_REPORTS');
       }
+
+      item.style.display = isAllowed ? 'flex' : 'none';
     });
 
     // Render active route inside page-view-container
     const container = document.getElementById('page-view-container');
     if (!container) return;
 
-    // If logged in as staff, render restricted staff view for dashboard & restricted routes
+    // If logged in as staff, check route permission
     if (isStaff) {
-      if (this.currentRoute === 'dashboard' || restrictedRoutes.includes(this.currentRoute)) {
+      if (this.currentRoute === 'dashboard') {
+        container.innerHTML = this.renderStaffDashboard(state);
+        return;
+      }
+      let canAccessCurrent = true;
+      const r = this.currentRoute;
+      if (r === 'expenses') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_EXPENSES') || window.iKhataStore.checkPermission('ADD_EXPENSE');
+      else if (r === 'pnl') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_PNL') || window.iKhataStore.checkPermission('VIEW_PROFIT');
+      else if (r === 'analytics' || r === 'statement-generator' || r === 'simulator') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_REPORTS');
+      else if (r === 'employees') canAccessCurrent = window.iKhataStore.checkPermission('MANAGE_EMPLOYEES');
+
+      if (!canAccessCurrent) {
         container.innerHTML = this.renderStaffDashboard(state);
         return;
       }

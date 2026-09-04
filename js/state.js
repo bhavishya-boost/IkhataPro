@@ -501,11 +501,19 @@
       if (state && Array.isArray(state.employees)) {
         // Remove old hardcoded demo employees
         state.employees = state.employees.filter(e => e && e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
+        // Backfill missing business_id and businessId for employees in local state
+        const defaultBId = (state.currentSession && state.currentSession.businessId) || (state.businesses && state.businesses[0] && state.businesses[0].id) || 'BUS_LJS';
+        state.employees.forEach(e => {
+          if (e) {
+            if (!e.business_id) e.business_id = e.businessId || defaultBId;
+            if (!e.businessId) e.businessId = e.business_id || defaultBId;
+          }
+        });
         // Deduplicate employees in state permanently by business_id + (phone || name || id)
         const seenEmpKeys = new Set();
         state.employees = state.employees.filter(e => {
           if (!e || e.isDeleted) return false;
-          const bId = e.business_id || 'BUS_LJS';
+          const bId = e.business_id || defaultBId;
           const cleanPhone = e.phone ? String(e.phone).replace(/\D/g, '') : '';
           const cleanName = e.name ? e.name.toLowerCase().trim() : '';
           const key = bId + '_' + (cleanPhone ? ('phone:' + cleanPhone) : ('name:' + cleanName));
@@ -734,19 +742,30 @@
             return Boolean(currentEmp.permissions.receivePayments);
           }
         }
+        if (action === 'VIEW_EXPENSES' || action === 'ADD_EXPENSE') {
+          if (currentEmp.permissions.viewProfit !== undefined) {
+            return Boolean(currentEmp.permissions.viewProfit);
+          }
+        }
       }
+
+      // Normalize role string
+      let normRole = role ? String(role).toUpperCase().trim() : 'OWNER';
+      if (normRole === 'STORE MANAGER' || normRole === 'STOREMANAGER') normRole = 'MANAGER';
+      if (normRole === 'BILLING STAFF' || normRole === 'BILLINGSTAFF') normRole = 'CASHIER';
+      if (normRole === 'SALES EXECUTIVE' || normRole === 'SALESEXECUTIVE') normRole = 'SALESMAN';
 
       // Default Role Matrix
       const matrix = {
         OWNER: ['ALL'],
-        MANAGER: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_POS', 'CREATE_INVOICE', 'CREATE_PURCHASE', 'ADD_EXPENSE', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'DELETE_TRANSACTIONS', 'VIEW_BALANCES', 'RECEIVE_PAYMENT'],
-        ACCOUNTANT: ['VIEW_ALL', 'CREATE_KHATA', 'CREATE_INVOICE', 'ADD_EXPENSE', 'VIEW_REPORTS', 'VIEW_PNL', 'VIEW_PROFIT', 'VIEW_BALANCES', 'RECEIVE_PAYMENT'],
-        CASHIER: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
-        SALESMAN: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
+        MANAGER: ['VIEW_ALL', 'VIEW_KHATA', 'CREATE_KHATA', 'CREATE_POS', 'CREATE_INVOICE', 'CREATE_PURCHASE', 'ADD_EXPENSE', 'VIEW_EXPENSES', 'VIEW_INVENTORY', 'MANAGE_INVENTORY', 'VIEW_REPORTS', 'DELETE_TRANSACTIONS', 'VIEW_BALANCES', 'RECEIVE_PAYMENT', 'MANAGE_EMPLOYEES', 'VIEW_PNL', 'VIEW_PROFIT'],
+        ACCOUNTANT: ['VIEW_ALL', 'VIEW_KHATA', 'CREATE_KHATA', 'CREATE_INVOICE', 'ADD_EXPENSE', 'VIEW_EXPENSES', 'VIEW_REPORTS', 'VIEW_PNL', 'VIEW_PROFIT', 'VIEW_BALANCES', 'RECEIVE_PAYMENT', 'VIEW_INVENTORY'],
+        CASHIER: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'CREATE_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
+        SALESMAN: ['CREATE_POS', 'RECEIVE_PAYMENT', 'VIEW_KHATA', 'CREATE_KHATA', 'VIEW_INVENTORY', 'VIEW_BALANCES'],
         'DELIVERY STAFF': ['VIEW_KHATA', 'RECEIVE_PAYMENT']
       };
 
-      const allowed = matrix[role] || matrix['CASHIER'];
+      const allowed = matrix[normRole] || matrix['CASHIER'];
       if (allowed.includes('ALL') || allowed.includes(action)) return true;
       return false;
     }
@@ -799,6 +818,8 @@
       const bId = this.getActiveBusinessId();
       const recBId = record.business_id || record.businessId;
 
+      if (record.shopId && record.shopId === this.getShopId()) return true;
+
       const isDemoStore = bId === 'BUS_LJS' || bId === 'BUS_SHARMA';
       if (!isDemoStore) {
         if (recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
@@ -811,11 +832,11 @@
       const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
 
       if (session && session.isAuthenticated) {
-        if (!recBId) return false;
+        if (!recBId) return true;
         return recBId === bId || (cachedUuid && recBId === cachedUuid);
       }
 
-      if (!recBId) return isDemoStore;
+      if (!recBId) return true;
       return recBId === bId || (cachedUuid && recBId === cachedUuid);
     }
 
@@ -884,7 +905,51 @@
     }
 
     getEmployees() {
+      const bId = this.getActiveBusinessId();
+      const shopId = this.getShopId();
       if (!this.state.employees) this.state.employees = [];
+
+      // Ensure staff accounts are synced to employees list
+      if (this.state.staffAccounts && Array.isArray(this.state.staffAccounts)) {
+        this.state.staffAccounts.forEach(staff => {
+          if (staff && !staff.isDeleted) {
+            const staffPhone = staff.phone ? String(staff.phone).replace(/\D/g, '') : '';
+            const staffName = staff.name ? staff.name.toLowerCase().trim() : '';
+            const exists = this.state.employees.some(e =>
+              !e.isDeleted &&
+              ((e.id && e.id === staff.id) ||
+               (staffPhone && String(e.phone || '').replace(/\D/g, '') === staffPhone) ||
+               (staffName && e.name && e.name.toLowerCase().trim() === staffName))
+            );
+            if (!exists) {
+              this.state.employees.push({
+                id: staff.id || ('STAFF-' + Date.now()),
+                business_id: staff.businessId || staff.business_id || bId,
+                businessId: staff.businessId || staff.business_id || bId,
+                shopId: staff.shopId || shopId,
+                name: staff.name,
+                phone: staff.phone || '',
+                role: staff.role || 'Billing Staff',
+                sales: 0,
+                collections: 0,
+                username: staff.username || staff.id,
+                passcode: staff.passcode || '',
+                isDeleted: false
+              });
+            }
+          }
+        });
+      }
+
+      // Backfill missing business_id & shopId on employees
+      this.state.employees.forEach(emp => {
+        if (emp) {
+          if (!emp.business_id) emp.business_id = emp.businessId || bId;
+          if (!emp.businessId) emp.businessId = emp.business_id || bId;
+          if (!emp.shopId) emp.shopId = shopId;
+        }
+      });
+
       const emps = this.state.employees.filter(emp => this.isRecordForActiveBusiness(emp) && !emp.isDeleted);
       const seen = new Set();
       const deduped = [];
@@ -1093,7 +1158,7 @@
       else if (entityType === 'supplier') list = this.state.suppliers;
       else if (entityType === 'pos_bill' || entityType === 'bill') list = this.state.bills;
 
-      const record = list.find(r => r.id === recordId && r.business_id === bId);
+      const record = list.find(r => r.id === recordId && (this.isRecordForActiveBusiness(r) || r.business_id === bId || r.businessId === bId));
       if (!record) return false;
 
       record.isDeleted = true;
@@ -2339,9 +2404,12 @@
       const now = new Date();
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+      const activeEmp = this.getCurrentEmployee();
       const tx = {
         id: 't_' + Date.now(),
         business_id: bId,
+        businessId: bId,
+        shopId: this.getShopId(),
         customerId: customer.id,
         customerName: customer.name,
         type,
@@ -2349,13 +2417,15 @@
         date: today,
         time: timeStr,
         note: this.escapeHTML(note || (type === 'GAVE' ? 'Money Given / Credit' : 'Payment Received')),
-        mode: mode || (type === 'GOT' ? 'Cash' : 'Credit/Khata')
+        mode: mode || (type === 'GOT' ? 'Cash' : 'Credit/Khata'),
+        createdBy: activeEmp ? activeEmp.name : 'Owner',
+        createdByRole: activeEmp ? activeEmp.role : 'Owner',
+        staffId: activeEmp ? activeEmp.id : 'owner'
       };
 
       this.state.transactions.unshift(tx);
 
       // Track sales & collections for active employee leaderboard
-      const activeEmp = this.getCurrentEmployee();
       if (activeEmp) {
         if (type === 'GAVE') {
           activeEmp.sales = (activeEmp.sales || 0) + numAmount;
@@ -3356,6 +3426,36 @@
       return this.softDeleteRecord('transaction', transactionId);
     }
 
+    editTransaction(transactionId, updatedData) {
+      if (!this.state.transactions) return false;
+      const tx = this.state.transactions.find(t => t.id === transactionId && (this.isRecordForActiveBusiness(t) || !t.isDeleted));
+      if (!tx) return false;
+
+      const numAmount = parseFloat(updatedData.amount);
+      if (isNaN(numAmount) || numAmount <= 0) return false;
+
+      if (updatedData.type) tx.type = updatedData.type;
+      tx.amount = numAmount;
+      if (updatedData.note !== undefined) tx.note = this.escapeHTML(updatedData.note);
+      if (updatedData.mode) tx.mode = updatedData.mode;
+      if (updatedData.date) tx.date = updatedData.date;
+
+      tx.updatedAt = new Date().toISOString();
+      tx.updatedBy = (this.state.currentSession && this.state.currentSession.user) ? this.state.currentSession.user.name : 'Owner';
+
+      this.logAudit('TRANSACTION_EDITED', 'Transaction', tx.id, `Updated transaction #${tx.id} for ₹${numAmount}`);
+      this.recalculateTotals();
+      this.saveState();
+
+      if (window.iKhataSupabase && window.iKhataSupabase.isOnline) {
+        const cloudUuid = this.state.transactionCloudMap ? this.state.transactionCloudMap[tx.id] : null;
+        const cloudCustUuid = this.state.customerCloudMap ? this.state.customerCloudMap[tx.customerId] : null;
+        window.iKhataSupabase.syncTransactionToCloud(tx, cloudUuid, cloudCustUuid).catch(err => console.warn('Edit transaction cloud sync warning:', err.message));
+      }
+
+      return true;
+    }
+
     restockProduct(productId, addQty) {
       const bId = this.getActiveBusinessId();
       const prod = this.state.products.find(p => p.id === productId && p.business_id === bId);
@@ -3633,12 +3733,16 @@
       const staffUserId = 'STAFF-' + count;
       const passcode = Math.floor(100000 + Math.random() * 900000).toString();
 
+      const cleanPhone = (phone || '').trim().replace(/\D/g, '');
+      const cleanName = name.trim();
+
       const newStaff = {
         id: staffUserId,
         businessId: bId,
+        business_id: bId,
         shopId: shopId,
-        name: name.trim(),
-        phone: (phone || '').trim(),
+        name: cleanName,
+        phone: cleanPhone,
         role: role || 'Billing Staff',
         username: staffUserId,
         passcode: passcode,
@@ -3647,19 +3751,43 @@
 
       this.state.staffAccounts.push(newStaff);
 
-      // Sync to employees list as well if needed
+      // Sync to employees list as well
       if (!this.state.employees) this.state.employees = [];
-      this.state.employees.push({
-        id: staffUserId,
-        name: name.trim(),
-        phone: phone || '',
-        role: role || 'Billing Staff',
-        sales: 0,
-        collections: 0,
-        username: staffUserId,
-        passcode: passcode,
-        shopId: shopId
-      });
+
+      const existingEmp = this.state.employees.find(e =>
+        (e.id && e.id === staffUserId) ||
+        (cleanPhone && String(e.phone || '').replace(/\D/g, '') === cleanPhone) ||
+        (cleanName && e.name && e.name.toLowerCase().trim() === cleanName.toLowerCase())
+      );
+
+      if (existingEmp) {
+        existingEmp.id = staffUserId;
+        existingEmp.business_id = bId;
+        existingEmp.businessId = bId;
+        existingEmp.shopId = shopId;
+        existingEmp.name = cleanName;
+        existingEmp.phone = cleanPhone;
+        existingEmp.role = role || 'Billing Staff';
+        existingEmp.username = staffUserId;
+        existingEmp.passcode = passcode;
+        existingEmp.isDeleted = false;
+      } else {
+        this.state.employees.push({
+          id: staffUserId,
+          business_id: bId,
+          businessId: bId,
+          shopId: shopId,
+          name: cleanName,
+          phone: cleanPhone,
+          role: role || 'Billing Staff',
+          sales: 0,
+          collections: 0,
+          username: staffUserId,
+          passcode: passcode,
+          isDeleted: false,
+          createdAt: new Date().toISOString()
+        });
+      }
 
       this.saveState();
 

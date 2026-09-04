@@ -239,12 +239,17 @@ window.iKhataCustomers = {
                   <strong style="font-size: 0.95rem;">${t.type === 'GAVE' ? 'You Gave (Credit)' : 'You Got (Payment Received)'}</strong>
                   <div style="font-size: 0.8rem; color: var(--text-muted);">${t.date} ${t.time ? 'at ' + t.time : ''} • ${t.mode || 'Credit'}</div>
                   ${t.note ? `<div style="font-size: 0.85rem; color: var(--text-main); margin-top: 2px;">Note: ${t.note}</div>` : ''}
+                  ${t.createdBy ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">👤 Added by: <strong>${t.createdBy}</strong>${t.createdByRole ? ' (' + t.createdByRole + ')' : ''}</div>` : ''}
+                  ${t.updatedBy ? `<div style="font-size: 0.72rem; color: var(--primary); margin-top: 1px;">✏️ Edited by: ${t.updatedBy}</div>` : ''}
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
                   <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: ${t.type === 'GOT' ? 'var(--success)' : 'var(--danger)'};">
                     ${t.type === 'GOT' ? '-' : '+'}${formatCurrency(t.amount)}
                   </div>
-                  <button class="btn btn-outline btn-sm" style="padding: 2px 6px; font-size: 0.75rem;" onclick="window.iKhataPIN.requirePIN(() => { window.iKhataStore.deleteTransaction('${t.id}'); window.iKhataUI.showToast('Transaction deleted', 'success'); window.iKhataUI.refresh(); }, 'Delete Transaction')">
+                  <button class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="window.iKhataCustomers.openEditTransactionModal('${t.id}', '${t.type}', ${t.amount}, '${(t.note || '').replace(/'/g, '\\u0027')}', '${t.mode || ''}', '${t.date || ''}')" title="Edit Transaction">
+                    ✏️
+                  </button>
+                  <button class="btn btn-outline btn-sm" style="padding: 2px 6px; font-size: 0.75rem; color: var(--danger); border-color: var(--danger);" onclick="window.iKhataPIN.requirePIN(() => { window.iKhataStore.deleteTransaction('${t.id}'); window.iKhataUI.showToast('Transaction deleted', 'success'); window.iKhataUI.refresh(); }, 'Delete Transaction')" title="Delete Transaction">
                     🗑️
                   </button>
                 </div>
@@ -254,5 +259,80 @@ window.iKhataCustomers = {
         </div>
       </div>
     `;
+  },
+
+  openEditTransactionModal(txId, txType, txAmount, txNote, txMode, txDate) {
+    window.iKhataUI.openModal('✏️ Edit Transaction Entry', `
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="background: rgba(79,70,229,0.07); border: 1px solid rgba(79,70,229,0.2); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: var(--text-muted);">
+          📋 Transaction ID: <strong style="font-family: monospace;">${txId}</strong>
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Transaction Type</label>
+          <select id="edit-tx-type" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; background: var(--bg-card); box-sizing: border-box;">
+            <option value="GAVE" ${txType === 'GAVE' ? 'selected' : ''}>You Gave — Credit / Udhar</option>
+            <option value="GOT" ${txType === 'GOT' ? 'selected' : ''}>You Got — Payment Received</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Amount (₹) *</label>
+          <input id="edit-tx-amount" type="number" min="1" value="${txAmount}" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Payment Mode</label>
+          <select id="edit-tx-mode" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; background: var(--bg-card); box-sizing: border-box;">
+            <option value="Cash" ${txMode === 'Cash' ? 'selected' : ''}>💵 Cash</option>
+            <option value="UPI" ${txMode === 'UPI' ? 'selected' : ''}>📱 UPI</option>
+            <option value="Credit/Khata" ${txMode === 'Credit/Khata' ? 'selected' : ''}>📒 Credit / Khata</option>
+            <option value="Bank Transfer" ${txMode === 'Bank Transfer' ? 'selected' : ''}>🏦 Bank Transfer</option>
+            <option value="Cheque" ${txMode === 'Cheque' ? 'selected' : ''}>📄 Cheque</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Note / Remark</label>
+          <input id="edit-tx-note" type="text" value="${txNote || ''}" placeholder="Optional note..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Date</label>
+          <input id="edit-tx-date" type="date" value="${txDate || ''}" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; box-sizing: border-box;">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <button class="btn btn-outline" style="flex: 1;" onclick="window.iKhataUI.closeModal()">Cancel</button>
+          <button class="btn btn-primary" style="flex: 2;" onclick="window.iKhataCustomers.saveEditTransaction('${txId}')">
+            💾 Save Changes
+          </button>
+        </div>
+      </div>
+    `);
+  },
+
+  saveEditTransaction(txId) {
+    const type = document.getElementById('edit-tx-type')?.value;
+    const amount = parseFloat(document.getElementById('edit-tx-amount')?.value);
+    const mode = document.getElementById('edit-tx-mode')?.value;
+    const note = document.getElementById('edit-tx-note')?.value?.trim();
+    const date = document.getElementById('edit-tx-date')?.value;
+
+    if (!amount || amount <= 0) {
+      window.iKhataUI.showToast('❌ Kripya valid amount enter karein!', 'error');
+      return;
+    }
+
+    const success = window.iKhataStore.editTransaction(txId, { type, amount, mode, note, date });
+    if (success) {
+      window.iKhataUI.closeModal();
+      window.iKhataUI.showToast('✅ Transaction successfully updated!', 'success');
+      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+        window.iKhataUI.refresh();
+      }
+    } else {
+      window.iKhataUI.showToast('❌ Transaction update failed. Please try again.', 'error');
+    }
   }
 };
