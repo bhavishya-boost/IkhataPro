@@ -3938,30 +3938,94 @@
     }
 
     loginStaff(shopIdInput, passcodeInput) {
-      const cleanShop = (shopIdInput || '').trim().toUpperCase();
+      const cleanShop = (shopIdInput || '').replace(/\s+/g, '').toUpperCase();
       const cleanPass = (passcodeInput || '').trim();
+      const cleanPassUpper = cleanPass.toUpperCase();
 
-      const activeShopId = this.getShopId().toUpperCase();
-      if (cleanShop !== activeShopId && cleanShop !== 'SHOP-90812') {
-        // Search across businesses
-        const bizMatch = (this.state.businesses || []).find(b => (b.shopId || 'SHOP-90812').toUpperCase() === cleanShop);
-        if (!bizMatch) {
-          return { success: false, error: 'Invalid Shop ID. Please check the Shop ID provided by your Admin.' };
+      if (!cleanShop) {
+        return { success: false, error: 'Please enter a valid Shop ID.' };
+      }
+      if (!cleanPass) {
+        return { success: false, error: 'Please enter Staff Passcode or User ID.' };
+      }
+
+      // 1. Locate the business by shopId or id
+      let targetBiz = (this.state.businesses || []).find(b => {
+        const bShop = String(b.shopId || '').replace(/\s+/g, '').toUpperCase();
+        const bId = String(b.id || '').toUpperCase();
+        return bShop === cleanShop || bId === cleanShop;
+      });
+
+      if (!targetBiz && (cleanShop === 'SHOP-90812' || cleanShop === 'BUS_LJS')) {
+        targetBiz = (this.state.businesses || []).find(b => b.id === 'BUS_LJS') || this.state.businesses[0];
+      }
+
+      // If not found in businesses list, check if any staff account or employee has this shopId
+      if (!targetBiz) {
+        const anyStaffMatch = (this.state.staffAccounts || []).concat(this.state.employees || []).find(s => {
+          const sShop = String(s.shopId || '').replace(/\s+/g, '').toUpperCase();
+          return sShop === cleanShop;
+        });
+        if (anyStaffMatch) {
+          const staffBId = anyStaffMatch.businessId || anyStaffMatch.business_id;
+          targetBiz = (this.state.businesses || []).find(b => b.id === staffBId);
         }
       }
 
-      const staffList = this.getStaffAccounts();
-      const staff = staffList.find(s =>
-        (s.passcode && s.passcode === cleanPass) ||
-        (s.username && s.username.toUpperCase() === cleanPass.toUpperCase()) ||
-        (s.id && s.id.toUpperCase() === cleanPass.toUpperCase())
-      );
+      if (!targetBiz) {
+        return { success: false, error: 'Invalid Shop ID. Shop not found on this device.' };
+      }
 
-      if (!staff && cleanPass !== '123456') {
+      const targetBId = targetBiz.id;
+      const activeShopId = targetBiz.shopId || cleanShop;
+
+      // 2. Gather staff accounts belonging to this target business from staffAccounts and employees
+      const candidateStaff = [];
+
+      if (Array.isArray(this.state.staffAccounts)) {
+        this.state.staffAccounts.forEach(s => {
+          if (!s.isDeleted) {
+            const sBId = s.businessId || s.business_id;
+            const sShop = String(s.shopId || '').replace(/\s+/g, '').toUpperCase();
+            if (sBId === targetBId || (sShop && sShop === cleanShop)) {
+              candidateStaff.push(s);
+            }
+          }
+        });
+      }
+
+      if (Array.isArray(this.state.employees)) {
+        this.state.employees.forEach(e => {
+          if (!e.isDeleted) {
+            const eBId = e.business_id || e.businessId;
+            const eShop = String(e.shopId || '').replace(/\s+/g, '').toUpperCase();
+            if (eBId === targetBId || (eShop && eShop === cleanShop)) {
+              const exists = candidateStaff.some(s => s.id === e.id || (s.username && s.username === e.username));
+              if (!exists) {
+                candidateStaff.push(e);
+              }
+            }
+          }
+        });
+      }
+
+      // 3. Match candidate staff by Passcode, Username, User ID, or Phone
+      const matchedStaff = candidateStaff.find(s => {
+        const sPass = String(s.passcode || '').trim();
+        const sUser = String(s.username || s.id || '').trim().toUpperCase();
+        const sId = String(s.id || '').trim().toUpperCase();
+        const sPhone = String(s.phone || '').replace(/\D/g, '');
+        return (sPass && sPass === cleanPass) ||
+               (sUser && sUser === cleanPassUpper) ||
+               (sId && sId === cleanPassUpper) ||
+               (sPhone && sPhone === cleanPass);
+      });
+
+      if (!matchedStaff && cleanPass !== '123456') {
         return { success: false, error: 'Invalid Staff Passcode or User ID.' };
       }
 
-      const activeStaff = staff || staffList[0] || {
+      const activeStaff = matchedStaff || candidateStaff[0] || {
         id: 'STAFF-101',
         name: 'Staff Member',
         role: 'Billing Staff',
@@ -3969,25 +4033,23 @@
         passcode: cleanPass
       };
 
-      const activeBiz = (typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : null) || this.state.businesses[0];
-
       this.state.currentSession = {
         isAuthenticated: true,
         role: 'STAFF',
         user: {
-          id: activeStaff.id,
-          name: activeStaff.name,
-          role: activeStaff.role,
+          id: activeStaff.id || activeStaff.username || 'STAFF-101',
+          name: activeStaff.name || 'Staff Member',
+          role: activeStaff.role || 'Billing Staff',
           shopId: activeStaff.shopId || activeShopId,
           username: activeStaff.username || activeStaff.id
         },
-        businessId: activeBiz ? activeBiz.id : 'BUS_LJS',
-        workspaceSlug: activeBiz ? activeBiz.slug : 'ljs-jewellers',
+        businessId: targetBiz.id,
+        workspaceSlug: targetBiz.slug || 'my-shop',
         loginTime: new Date().toISOString()
       };
 
       this.saveState();
-      return { success: true, staff: activeStaff, business: activeBiz };
+      return { success: true, staff: activeStaff, business: targetBiz };
     }
 
     isStaffSession() {
