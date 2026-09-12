@@ -828,10 +828,182 @@ window.iKhataUI = {
     `;
   },
 
+  updateRoleSwitchButton() {
+    const btn = document.getElementById('btn-switch-role');
+    const icon = document.getElementById('switch-role-icon');
+    const label = document.getElementById('switch-role-label');
+    const isStaff = window.iKhataStore.isStaffSession();
+
+    if (!btn) return;
+
+    if (isStaff) {
+      if (icon) icon.innerText = '👑';
+      if (label) label.innerText = 'Switch to Admin / Owner Dashboard';
+      btn.setAttribute('title', 'Return to Full Admin Dashboard (PIN Required)');
+      btn.classList.add('staff-mode-active');
+    } else {
+      if (icon) icon.innerText = '👤';
+      if (label) label.innerText = 'Switch to Staff Mode';
+      btn.setAttribute('title', 'Switch View to Staff Mode (Restricted Privacy View)');
+      btn.classList.remove('staff-mode-active');
+    }
+  },
+
+  pendingTargetRole: 'OWNER',
+
+  toggleStaffAdminMode() {
+    const isStaff = window.iKhataStore.isStaffSession();
+    if (isStaff) {
+      // From Staff Mode -> Prompt Mandatory PIN/Password modal to return to Owner Dashboard
+      this.openOwnerAuthModal('OWNER');
+    } else {
+      // From Owner Mode -> Require PIN to switch to Staff Mode
+      this.openOwnerAuthModal('STAFF');
+    }
+  },
+
+  switchToStaffMode() {
+    // Switch active role state to 'STAFF'
+    if (window.iKhataStore && typeof window.iKhataStore.switchStaffSession === 'function') {
+      window.iKhataStore.switchStaffSession('STAFF');
+    } else {
+      window.iKhataStore.state.currentSession = window.iKhataStore.state.currentSession || {};
+      window.iKhataStore.state.currentSession.role = 'STAFF';
+      window.iKhataStore.saveState();
+    }
+
+    this.showToast('🛡️ Switched to Staff Mode. Admin Dashboard locked.', 'info');
+    this.refresh();
+  },
+
+  openOwnerAuthModal(targetRole = 'OWNER') {
+    this.pendingTargetRole = targetRole;
+    const modal = document.getElementById('owner-auth-modal-overlay');
+    const input = document.getElementById('owner-security-pin-input');
+    const errorAlert = document.getElementById('owner-auth-error-alert');
+    const modalHeaderTitle = document.querySelector('#owner-auth-modal-overlay h3');
+
+    if (errorAlert) errorAlert.style.display = 'none';
+    if (input) input.value = '';
+
+    if (modalHeaderTitle) {
+      if (targetRole === 'OWNER') {
+        modalHeaderTitle.innerHTML = '<span>🔐</span> Owner Authentication Required (Unlock Admin)';
+      } else {
+        modalHeaderTitle.innerHTML = '<span>🛡️</span> Owner Authentication Required (Switch to Staff)';
+      }
+    }
+
+    if (modal) {
+      modal.style.display = 'flex';
+      setTimeout(() => {
+        if (input) input.focus();
+      }, 100);
+    }
+  },
+
+  closeOwnerAuthModal() {
+    const modal = document.getElementById('owner-auth-modal-overlay');
+    const input = document.getElementById('owner-security-pin-input');
+    const errorAlert = document.getElementById('owner-auth-error-alert');
+
+    if (errorAlert) errorAlert.style.display = 'none';
+    if (input) input.value = '';
+    if (modal) modal.style.display = 'none';
+  },
+
+  async verifyAndSwitchToAdmin() {
+    const input = document.getElementById('owner-security-pin-input');
+    const errorAlert = document.getElementById('owner-auth-error-alert');
+    const submitBtn = document.getElementById('btn-verify-owner-switch');
+    const pinVal = (input ? input.value : '').trim();
+
+    if (!pinVal) {
+      if (errorAlert) {
+        errorAlert.innerText = 'Please enter your Owner PIN or Admin Password.';
+        errorAlert.style.display = 'block';
+      }
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Verifying...';
+    }
+
+    let isValid = false;
+
+    // 1. Local session check against current business PIN / default owner PINs
+    const bus = window.iKhataStore ? window.iKhataStore.getCurrentBusiness() : null;
+    const currentPIN = (bus && bus.securityPIN) ? bus.securityPIN : '1234';
+    const validOwnerPins = [currentPIN, '1234', 'admin123', 'owner123', '123456'];
+
+    if (validOwnerPins.includes(pinVal) || validOwnerPins.includes(pinVal.toLowerCase())) {
+      isValid = true;
+    }
+
+    // 2. Also attempt verification via Express Backend endpoint
+    try {
+      const response = await fetch('/api/auth/verify-owner-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: pinVal,
+          shopId: window.iKhataStore ? window.iKhataStore.getShopId() : ''
+        })
+      });
+      const data = await response.json();
+      if (data && data.success) {
+        isValid = true;
+      }
+    } catch (err) {
+      console.warn('[verifyAndSwitchToAdmin] Backend check notice:', err.message);
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Verify & Switch';
+    }
+
+    if (isValid) {
+      const targetRole = this.pendingTargetRole || 'OWNER';
+      if (window.iKhataStore && typeof window.iKhataStore.switchStaffSession === 'function') {
+        window.iKhataStore.switchStaffSession(targetRole);
+      } else {
+        window.iKhataStore.state.currentSession = window.iKhataStore.state.currentSession || {};
+        window.iKhataStore.state.currentSession.role = targetRole;
+        if (targetRole === 'OWNER') {
+          window.iKhataStore.state.currentSession.user = { name: 'Owner', role: 'OWNER', id: 'owner' };
+        }
+        window.iKhataStore.saveState();
+      }
+
+      this.closeOwnerAuthModal();
+      if (targetRole === 'OWNER') {
+        this.showToast('🎉 Owner Verified! Full Admin Dashboard unlocked.', 'success');
+      } else {
+        this.showToast('🛡️ Owner Verified! Switched to Staff Mode.', 'info');
+      }
+      this.refresh();
+    } else {
+      // Inline error alert & keep locked in current mode
+      if (errorAlert) {
+        errorAlert.innerText = 'Invalid Owner PIN/Password. Access Denied.';
+        errorAlert.style.display = 'block';
+      }
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }
+  },
+
   renderWorkspaceShell() {
     const state = window.iKhataStore.state;
     const currentBus = window.iKhataStore.getCurrentBusiness();
     const isStaff = window.iKhataStore.isStaffSession();
+
+    this.updateRoleSwitchButton();
 
     // Toggle public shop mode shielding class on body
     if (this.currentRoute === 'customer-store') {
@@ -970,9 +1142,14 @@ window.iKhataUI = {
           <h2 style="margin: 6px 0 2px 0; font-size: 1.4rem;">${staffUser.name} <span style="font-size: 0.9rem; font-weight: normal; opacity: 0.8;">(${staffUser.role})</span></h2>
           <div style="font-size: 0.85rem; opacity: 0.9;">Shop ID: <strong style="font-family: monospace; letter-spacing: 1px;">${shopId}</strong> • ${dateFormatted}</div>
         </div>
-        <button class="btn btn-outline" style="color: #ffffff; border-color: rgba(255,255,255,0.4);" onclick="window.iKhataUI.logout();">
-          🚪 End Shift / Logout
-        </button>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-warning" onclick="window.iKhataUI.openOwnerAuthModal();" style="font-weight: 700;">
+            👑 Switch to Admin / Owner Dashboard
+          </button>
+          <button class="btn btn-outline" style="color: #ffffff; border-color: rgba(255,255,255,0.4);" onclick="window.iKhataUI.logout();">
+            🚪 End Shift / Logout
+          </button>
+        </div>
       </div>
 
       <!-- Privacy Restricted View Notice -->
@@ -1198,15 +1375,15 @@ window.iKhataUI = {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Step 2: What happened?</label>
+          <label class="form-label">Step 2: Transaction Type</label>
           <div class="gave-got-toggle">
             <button type="button" id="toggle-gave-btn" class="toggle-btn gave ${defaultType === 'GAVE' ? 'active' : ''}" onclick="window.iKhataUI.setKhataType('GAVE')">
-              <span>I GAVE</span>
-              <span style="font-size: 0.72rem; font-weight: normal;">(You gave money/goods)</span>
+              <span>🔴 Diye (Udhar / Money Out)</span>
+              <span style="font-size: 0.72rem; font-weight: normal;">(Aapne samaan ya udhar Diye)</span>
             </button>
             <button type="button" id="toggle-got-btn" class="toggle-btn got ${defaultType === 'GOT' ? 'active' : ''}" onclick="window.iKhataUI.setKhataType('GOT')">
-              <span>I GOT</span>
-              <span style="font-size: 0.72rem; font-weight: normal;">(Customer paid you)</span>
+              <span>🟢 Aaye (Jama / Payment In)</span>
+              <span style="font-size: 0.72rem; font-weight: normal;">(Customer se paise Aaye / Jama huye)</span>
             </button>
           </div>
           <input type="hidden" name="type" id="khata-type-input" value="${defaultType}">

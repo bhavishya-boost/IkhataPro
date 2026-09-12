@@ -165,6 +165,13 @@
             <span>🤖</span>
           </button>
 
+          <button class="btn btn-warning btn-sm staff-switch-btn" id="btn-switch-role"
+            onclick="window.iKhataUI.toggleStaffAdminMode()" title="Switch Role Mode"
+            style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700;">
+            <span id="switch-role-icon">👑</span>
+            <span id="switch-role-label">Switch to Admin / Owner Dashboard</span>
+          </button>
+
           <button class="btn btn-outline btn-sm"
             onclick="window.iKhataUI.showNotification('Local Storage Active (MongoDB coming soon)', 'info')"
             title="Data saved locally in browser" style="display: inline-flex; align-items: center; gap: 4px;">
@@ -289,6 +296,42 @@
               <button type="button" class="btn btn-secondary"
                 onclick="window.iKhataUI.closeQuickAddCustomerModal()">Cancel</button>
               <button type="submit" class="btn btn-primary" id="btn-save-quick-customer">Save & Select</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Secure Owner Authentication PIN/Password Modal Overlay -->
+    <div class="modal-overlay" id="owner-auth-modal-overlay" style="z-index: 2000; display: none;">
+      <div class="modal-card owner-auth-card" style="max-width: 420px; width: 92%;">
+        <div class="modal-header" style="border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.1)); padding-bottom: 12px;">
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 1.15rem; margin: 0; color: var(--text-main, #ffffff);">
+            <span>🔐</span> Owner Authentication Required
+          </h3>
+          <button class="close-btn" type="button" onclick="window.iKhataUI.closeOwnerAuthModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px 16px 16px 16px;">
+          <div id="owner-auth-error-alert" class="inline-error-msg" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; margin-bottom: 16px;">
+            Invalid Owner PIN/Password. Access Denied.
+          </div>
+          <p style="font-size: 0.88rem; color: var(--text-muted, #94a3b8); margin-bottom: 16px; line-height: 1.4;">
+            Enter your 4-digit Security PIN or Owner Admin Password to return to full Admin Dashboard view.
+          </p>
+          <form id="owner-auth-form" onsubmit="event.preventDefault(); window.iKhataUI.verifyAndSwitchToAdmin();">
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label class="form-label" for="owner-security-pin-input" style="font-weight: 600; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+                Security PIN / Admin Password <span style="color: var(--danger, #ef4444);">*</span>
+              </label>
+              <input type="password" id="owner-security-pin-input" class="form-input" placeholder="Enter PIN (e.g. 1234) or Admin Password" required autocomplete="current-password" style="width: 100%; box-sizing: border-box;">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="window.iKhataUI.closeOwnerAuthModal()">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary" id="btn-verify-owner-switch" style="background: var(--primary, #4f46e5); font-weight: 700;">
+                Verify & Switch to Admin
+              </button>
             </div>
           </form>
         </div>

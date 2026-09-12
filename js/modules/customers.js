@@ -140,8 +140,8 @@ window.iKhataCustomers = {
             <div style="font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800; color: ${customer.balance > 0 ? 'var(--danger)' : (customer.balance < 0 ? 'var(--success)' : 'var(--text-muted)')};">
               ${formatCurrency(customer.balance)}
             </div>
-            <div style="font-size: 0.8rem; font-weight: 700; color: ${customer.balance > 0 ? 'var(--danger)' : 'var(--success)'};">
-              ${customer.balance > 0 ? 'YOU WILL GET' : (customer.balance < 0 ? 'YOU WILL GIVE' : 'SETTLED')}
+            <div style="font-size: 0.8rem; font-weight: 700; color: ${customer.balance > 0 ? 'var(--danger)' : (customer.balance < 0 ? 'var(--success)' : 'var(--text-muted)')};">
+              ${customer.balance > 0 ? '🔴 AAPKO LENE HAIN (UDHAR)' : (customer.balance < 0 ? '🟢 RECEIVED' : 'SETTLED')}
             </div>
           </div>
         </div>
@@ -176,7 +176,7 @@ window.iKhataCustomers = {
           </div>
 
           <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px;">
-            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">Total Payments Made</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">Total Payment Aaye (Jama)</div>
             <div style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; color: var(--success); margin-top: 4px;">
               ₹${totalGot.toLocaleString('en-IN')}
             </div>
@@ -194,7 +194,7 @@ window.iKhataCustomers = {
         <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; justify-content: space-between; align-items: center;">
           <div style="display: flex; gap: 12px; flex-wrap: wrap;">
             <button class="btn btn-success" onclick="window.iKhataUI.openReceivePaymentModal('${customer.id}')">
-              💰 Receive Payment
+              🟢 Receive Payment (Aaye)
             </button>
 
             ${customer.isBadDebt ? `
@@ -202,8 +202,8 @@ window.iKhataCustomers = {
                 🚫 Credit Blocked
               </button>
             ` : `
-              <button class="btn btn-primary" onclick="window.iKhataUI.openAddKhataModal('GAVE', '${customer.id}')">
-                ➕ Add Transaction
+              <button class="btn btn-danger" onclick="window.iKhataUI.openAddKhataModal('GAVE', '${customer.id}')">
+                🔴 Add Udhar (Diye)
               </button>
             `}
 
@@ -236,15 +236,17 @@ window.iKhataCustomers = {
               <div class="timeline-dot ${t.type === 'GOT' ? 'got' : 'gave'}"></div>
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
                 <div>
-                  <strong style="font-size: 0.95rem;">${t.type === 'GAVE' ? 'You Gave (Credit)' : 'You Got (Payment Received)'}</strong>
-                  <div style="font-size: 0.8rem; color: var(--text-muted);">${t.date} ${t.time ? 'at ' + t.time : ''} • ${t.mode || 'Credit'}</div>
+                  <strong style="font-size: 0.95rem; color: ${t.type === 'GAVE' ? 'var(--danger)' : 'var(--success)'};">
+                    ${t.type === 'GAVE' ? '🔴 Diye (Udhar)' : '🟢 Aaye (Jama)'}
+                  </strong>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">${t.date} ${t.time ? 'at ' + t.time : ''} • ${t.mode && !t.mode.includes('Credit') ? t.mode : 'Udhar/Khata'}</div>
                   ${t.note ? `<div style="font-size: 0.85rem; color: var(--text-main); margin-top: 2px;">Note: ${t.note}</div>` : ''}
                   ${t.createdBy ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">👤 Added by: <strong>${t.createdBy}</strong>${t.createdByRole ? ' (' + t.createdByRole + ')' : ''}</div>` : ''}
                   ${t.updatedBy ? `<div style="font-size: 0.72rem; color: var(--primary); margin-top: 1px;">✏️ Edited by: ${t.updatedBy}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                  <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: ${t.type === 'GOT' ? 'var(--success)' : 'var(--danger)'};">
-                    ${t.type === 'GOT' ? '-' : '+'}${formatCurrency(t.amount)}
+                  <div style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: ${t.type === 'GAVE' ? 'var(--danger)' : 'var(--success)'};">
+                    ${t.type === 'GAVE' ? '-' : '+'}${formatCurrency(t.amount)}
                   </div>
                   <button class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="window.iKhataCustomers.openEditTransactionModal('${t.id}', '${t.type}', ${t.amount}, '${(t.note || '').replace(/'/g, '\\u0027')}', '${t.mode || ''}', '${t.date || ''}')" title="Edit Transaction">
                     ✏️
@@ -271,8 +273,8 @@ window.iKhataCustomers = {
         <div>
           <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Transaction Type</label>
           <select id="edit-tx-type" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.95rem; outline: none; background: var(--bg-card); box-sizing: border-box;">
-            <option value="GAVE" ${txType === 'GAVE' ? 'selected' : ''}>You Gave — Credit / Udhar</option>
-            <option value="GOT" ${txType === 'GOT' ? 'selected' : ''}>You Got — Payment Received</option>
+            <option value="GAVE" ${txType === 'GAVE' ? 'selected' : ''}>🔴 Diye — Money/Goods Given (Udhar)</option>
+            <option value="GOT" ${txType === 'GOT' ? 'selected' : ''}>🟢 Aaye — Payment Received (Jama)</option>
           </select>
         </div>
 

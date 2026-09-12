@@ -284,6 +284,36 @@ app.post('/api/auth/reset-staff-password', (req, res) => {
   }
 });
 
+// 5. POST /api/auth/verify-owner-pin (Owner PIN/Password verification for Staff-to-Admin switch)
+app.post('/api/auth/verify-owner-pin', (req, res) => {
+  try {
+    const { pin, password, shopId } = req.body;
+    const inputPass = (pin || password || '').toString().trim();
+    if (!inputPass) {
+      return res.status(400).json({ success: false, error: 'Security PIN or Owner Admin Password is required.' });
+    }
+
+    // Master owner passwords & 4-digit PINs
+    const validOwnerPins = ['1234', 'admin123', 'owner123', '123456'];
+    
+    if (validOwnerPins.includes(inputPass) || validOwnerPins.includes(inputPass.toLowerCase())) {
+      return res.status(200).json({
+        success: true,
+        message: 'Owner Authentication Successful. Full Admin Dashboard unlocked.',
+        role: 'OWNER'
+      });
+    }
+
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid Owner PIN/Password. Access Denied.'
+    });
+  } catch (err) {
+    console.error('[Owner Auth PIN] Error:', err.message);
+    return res.status(500).json({ success: false, error: 'Internal server error during owner authentication.' });
+  }
+});
+
 
 // ── Health Check ───────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

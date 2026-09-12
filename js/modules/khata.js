@@ -41,16 +41,16 @@ window.iKhataModule = {
 
       <!-- Top Balances Banner -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-        <div style="background: var(--success-light); border: 1px solid var(--success-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--success); text-transform: uppercase;">YOU WILL GET</span>
-          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--success);">
+        <div style="background: var(--danger-light); border: 1px solid var(--danger-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--danger); text-transform: uppercase;">🔴 AAPKO LENE HAIN (UDHAR)</span>
+          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--danger);">
             ${formatCurrency(bus.toReceiveTotal)}
           </span>
         </div>
 
-        <div style="background: var(--danger-light); border: 1px solid var(--danger-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--danger); text-transform: uppercase;">YOU WILL GIVE</span>
-          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--danger);">
+        <div style="background: var(--success-light); border: 1px solid var(--success-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--success); text-transform: uppercase;">🟢 RECEIVED</span>
+          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--success);">
             ${formatCurrency(bus.toGiveTotal)}
           </span>
         </div>
@@ -68,10 +68,10 @@ window.iKhataModule = {
               ALL (${allCust.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'GET' ? 'active' : ''}" onclick="window.iKhataModule.currentTab = 'GET'; window.iKhataUI.refresh();">
-              YOU WILL GET (${allCust.filter(c=>c.balance>0).length})
+              🔴 AAPKO LENE HAIN (${allCust.filter(c=>c.balance>0).length})
             </button>
             <button class="tab-btn ${this.currentTab === 'GIVE' ? 'active' : ''}" onclick="window.iKhataModule.currentTab = 'GIVE'; window.iKhataUI.refresh();">
-              YOU WILL GIVE (${allCust.filter(c=>c.balance<0).length})
+              🟢 RECEIVED (${allCust.filter(c=>c.balance<0).length})
             </button>
           </div>
         </div>
@@ -105,11 +105,11 @@ window.iKhataModule = {
 
             <div style="display: flex; align-items: center; gap: 16px;">
               <div class="customer-balance-box" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">
-                <div class="balance-amount ${c.balance > 0 ? 'get' : (c.balance < 0 ? 'give' : 'neutral')}">
+                <div class="balance-amount ${c.balance > 0 ? 'give' : (c.balance < 0 ? 'get' : 'neutral')}">
                   ${formatCurrency(c.balance)}
                 </div>
                 <div class="balance-label">
-                  ${c.balance > 0 ? 'YOU WILL GET' : (c.balance < 0 ? 'YOU WILL GIVE' : 'SETTLED')}
+                  ${c.balance > 0 ? '🔴 AAPKO LENE HAIN' : (c.balance < 0 ? '🟢 RECEIVED' : 'SETTLED')}
                 </div>
               </div>
 

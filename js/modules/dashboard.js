@@ -84,13 +84,13 @@ window.iKhataDashboard = {
         <div class="stat-card danger">
           <div class="stat-label">CUSTOMER RECEIVABLES</div>
           <div class="stat-value" style="color: var(--danger);">${formatCurrency(bus.toReceiveTotal)}</div>
-          <div class="stat-subtext" style="color: var(--danger);">You Will Get</div>
+          <div class="stat-subtext" style="color: var(--danger);">🔴 Aapko Lene Hain (Udhar)</div>
         </div>
 
         <div class="stat-card warning">
           <div class="stat-label">SUPPLIER PAYABLES</div>
           <div class="stat-value" style="color: var(--warning);">${formatCurrency(totalSupplierPayable)}</div>
-          <div class="stat-subtext" style="color: var(--warning);">You Will Give</div>
+          <div class="stat-subtext" style="color: var(--warning);">🟢 Aapko Dene Hain (Payable)</div>
         </div>
       </div>
 
@@ -216,7 +216,7 @@ window.iKhataDashboard = {
               </div>
               <div class="customer-balance-box">
                 <div class="balance-amount ${tx.type === 'GAVE' ? 'give' : 'get'}">
-                  ${tx.type === 'GAVE' ? 'You Gave' : 'You Got'} ${formatCurrency(tx.amount)}
+                  ${tx.type === 'GAVE' ? '🔴 Udhar' : '🟢 Payment'} ${formatCurrency(tx.amount)}
                 </div>
                 <div class="balance-label">${tx.mode || 'Credit'}</div>
               </div>

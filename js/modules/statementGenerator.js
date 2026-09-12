@@ -128,8 +128,8 @@ window.iKhataStatementGenerator = {
                   <td style="padding: 8px;"><span class="badge ${t.type === 'GOT' ? 'badge-success' : 'badge-danger'}">${t.type === 'GOT' ? 'Got (Payment)' : 'Gave (Credit)'}</span></td>
                   <td style="padding: 8px;">${t.mode || 'Credit'}</td>
                   <td style="padding: 8px; color: var(--text-muted);">${t.note || '-'}</td>
-                  <td style="padding: 8px; text-align: right; font-weight: 700; color: ${t.type === 'GOT' ? 'var(--success)' : 'var(--danger)'};">
-                    ${t.type === 'GOT' ? '-' : '+'}${formatCurrency(t.amount)}
+                  <td style="padding: 8px; text-align: right; font-weight: 700; color: ${t.type === 'GAVE' ? 'var(--danger)' : 'var(--success)'};">
+                    ${t.type === 'GAVE' ? '-' : '+'}${formatCurrency(t.amount)}
                   </td>
                 </tr>
               `).join('')}

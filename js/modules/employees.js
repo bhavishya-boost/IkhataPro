@@ -149,14 +149,14 @@ window.iKhataEmployees = {
   },
 
   switchStaff(empIdOrName) {
-    if (window.iKhataStore && typeof window.iKhataStore.switchStaffSession === 'function') {
+    if (window.iKhataUI && typeof window.iKhataUI.openOwnerAuthModal === 'function') {
+      window.iKhataUI.closeModal();
+      const targetRole = (empIdOrName === 'OWNER' || empIdOrName === 'owner') ? 'OWNER' : 'STAFF';
+      window.iKhataUI.openOwnerAuthModal(targetRole);
+    } else if (window.iKhataStore && typeof window.iKhataStore.switchStaffSession === 'function') {
       window.iKhataStore.switchStaffSession(empIdOrName);
       window.iKhataUI.closeModal();
-      const roleName = empIdOrName === 'OWNER' ? 'Owner' : empIdOrName;
-      window.iKhataUI.showToast(`✅ Session switched to ${roleName}!`, 'success');
-      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
-        window.iKhataUI.refresh();
-      }
+      window.iKhataUI.refresh();
     }
   },
 
