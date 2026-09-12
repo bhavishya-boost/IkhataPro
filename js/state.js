@@ -405,6 +405,27 @@
       if (Array.isArray(this.state.invoices)) {
         this.state.invoices = this.state.invoices.filter(i => !isSample(i.customerName, i.id, null, null, i.business_id || i.businessId, i.note));
       }
+      if (Array.isArray(this.state.employees)) {
+        this.state.employees = this.state.employees.filter(e => {
+          if (!e) return false;
+          if (e.id === 'emp1' || e.id === 'emp2' || e.id === 'emps1') return false;
+          if (!isDemoStore) {
+            const recBId = e.business_id || e.businessId;
+            if (!recBId || recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
+          }
+          return true;
+        });
+      }
+      if (Array.isArray(this.state.staffAccounts)) {
+        this.state.staffAccounts = this.state.staffAccounts.filter(s => {
+          if (!s) return false;
+          if (!isDemoStore) {
+            const recBId = s.businessId || s.business_id;
+            if (!recBId || recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
+          }
+          return true;
+        });
+      }
 
       this.deduplicateExpenses();
       this.recalculateTotals();
@@ -510,19 +531,24 @@
       if (state && Array.isArray(state.employees)) {
         // Remove old hardcoded demo employees
         state.employees = state.employees.filter(e => e && e.id !== 'emp1' && e.id !== 'emp2' && e.id !== 'emps1');
-        // Backfill missing business_id and businessId for employees in local state
-        const defaultBId = (state.currentSession && state.currentSession.businessId) || (state.businesses && state.businesses[0] && state.businesses[0].id) || 'BUS_LJS';
+        // If employee is missing business_id, assign BUS_LJS (demo) only — never dynamically stamp with currently logged in user's business
         state.employees.forEach(e => {
           if (e) {
-            if (!e.business_id) e.business_id = e.businessId || defaultBId;
-            if (!e.businessId) e.businessId = e.business_id || defaultBId;
+            if (!e.business_id && !e.businessId) {
+              e.business_id = 'BUS_LJS';
+              e.businessId = 'BUS_LJS';
+            } else if (!e.business_id) {
+              e.business_id = e.businessId;
+            } else if (!e.businessId) {
+              e.businessId = e.business_id;
+            }
           }
         });
         // Deduplicate employees in state permanently by business_id + (phone || name || id)
         const seenEmpKeys = new Set();
         state.employees = state.employees.filter(e => {
           if (!e || e.isDeleted) return false;
-          const bId = e.business_id || defaultBId;
+          const bId = e.business_id || 'BUS_LJS';
           const cleanPhone = e.phone ? String(e.phone).replace(/\D/g, '') : '';
           const cleanName = e.name ? e.name.toLowerCase().trim() : '';
           const key = bId + '_' + (cleanPhone ? ('phone:' + cleanPhone) : ('name:' + cleanName));
@@ -531,6 +557,20 @@
           }
           seenEmpKeys.add(key);
           return true;
+        });
+      }
+      if (state && Array.isArray(state.staffAccounts)) {
+        state.staffAccounts.forEach(s => {
+          if (s) {
+            if (!s.businessId && !s.business_id) {
+              s.businessId = 'BUS_LJS';
+              s.business_id = 'BUS_LJS';
+            } else if (!s.business_id) {
+              s.business_id = s.businessId;
+            } else if (!s.businessId) {
+              s.businessId = s.business_id;
+            }
+          }
         });
       }
       return state;
@@ -720,6 +760,7 @@
 
     deleteEmployee(empIdOrName) {
       if (!this.state.employees) return false;
+      const bId = this.getActiveBusinessId();
       const emp = this.state.employees.find(e => 
         this.isRecordForActiveBusiness(e) && !e.isDeleted &&
         (e.id === empIdOrName || (e.name && e.name.toLowerCase() === String(empIdOrName).toLowerCase()))
@@ -727,6 +768,15 @@
       if (emp) {
         emp.isDeleted = true;
         emp.deletedAt = new Date().toISOString();
+        if (Array.isArray(this.state.staffAccounts)) {
+          const staff = this.state.staffAccounts.find(s =>
+            (s.businessId === bId || s.business_id === bId) &&
+            (s.id === emp.id || s.id === empIdOrName || s.username === emp.id || (s.name && s.name.toLowerCase() === emp.name.toLowerCase()))
+          );
+          if (staff) {
+            staff.isDeleted = true;
+          }
+        }
         this.logAudit('EMPLOYEE_DELETED', 'Employee', emp.id, `Deleted staff member ${emp.name}`);
         this.saveState();
         return true;
@@ -851,29 +901,18 @@
     // Helper to verify business membership
     isRecordForActiveBusiness(record) {
       if (!record) return false;
-      const session = this.state.currentSession;
       const bId = this.getActiveBusinessId();
       const recBId = record.business_id || record.businessId;
-
-      if (record.shopId && record.shopId === this.getShopId()) return true;
+      const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
 
       const isDemoStore = bId === 'BUS_LJS' || bId === 'BUS_SHARMA';
       if (!isDemoStore) {
-        if (recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
-        if (recBId && recBId !== bId) {
-          const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
-          if (cachedUuid && recBId !== cachedUuid) return false;
-        }
-      }
-
-      const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
-
-      if (session && session.isAuthenticated) {
-        if (!recBId) return true;
+        if (!recBId || recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
         return recBId === bId || (cachedUuid && recBId === cachedUuid);
       }
 
-      if (!recBId) return true;
+      // Demo store
+      if (!recBId) return bId === 'BUS_LJS';
       return recBId === bId || (cachedUuid && recBId === cachedUuid);
     }
 
@@ -952,14 +991,19 @@
       const shopId = this.getShopId();
       if (!this.state.employees) this.state.employees = [];
 
-      // Ensure staff accounts are synced to employees list
+      // Ensure staff accounts for THIS business ONLY are synced to employees list
       if (this.state.staffAccounts && Array.isArray(this.state.staffAccounts)) {
         this.state.staffAccounts.forEach(staff => {
           if (staff && !staff.isDeleted) {
+            const staffBId = staff.businessId || staff.business_id;
+            if (staffBId && staffBId !== bId) return;
+            if (!staffBId && (bId !== 'BUS_LJS')) return;
+
             const staffPhone = staff.phone ? String(staff.phone).replace(/\D/g, '') : '';
             const staffName = staff.name ? staff.name.toLowerCase().trim() : '';
             const exists = this.state.employees.some(e =>
               !e.isDeleted &&
+              (e.business_id === bId || e.businessId === bId) &&
               ((e.id && e.id === staff.id) ||
                (staffPhone && String(e.phone || '').replace(/\D/g, '') === staffPhone) ||
                (staffName && e.name && e.name.toLowerCase().trim() === staffName))
@@ -967,9 +1011,9 @@
             if (!exists) {
               this.state.employees.push({
                 id: staff.id || ('STAFF-' + Date.now()),
-                business_id: staff.businessId || staff.business_id || bId,
-                businessId: staff.businessId || staff.business_id || bId,
-                shopId: staff.shopId || shopId,
+                business_id: bId,
+                businessId: bId,
+                shopId: shopId,
                 name: staff.name,
                 phone: staff.phone || '',
                 role: staff.role || 'Billing Staff',
@@ -983,15 +1027,6 @@
           }
         });
       }
-
-      // Backfill missing business_id & shopId on employees
-      this.state.employees.forEach(emp => {
-        if (emp) {
-          if (!emp.business_id) emp.business_id = emp.businessId || bId;
-          if (!emp.businessId) emp.businessId = emp.business_id || bId;
-          if (!emp.shopId) emp.shopId = shopId;
-        }
-      });
 
       const emps = this.state.employees.filter(emp => this.isRecordForActiveBusiness(emp) && !emp.isDeleted);
       const seen = new Set();
@@ -1013,6 +1048,7 @@
 
     addEmployee(empData) {
       const bId = this.getActiveBusinessId();
+      const shopId = this.getShopId();
       if (!this.state.employees) this.state.employees = [];
 
       const cleanPhone = empData.phone ? String(empData.phone).replace(/\D/g, '') : '';
@@ -1048,6 +1084,8 @@
       const newEmp = {
         id: 'emp_' + Date.now(),
         business_id: bId,
+        businessId: bId,
+        shopId: shopId,
         name: cleanName,
         phone: cleanPhone,
         role: empData.role || 'Salesman',
@@ -2365,8 +2403,18 @@
         .replace(/(^-|-$)/g, '');
       const slug = rawSlug || ('shop-' + Date.now());
 
+      let hash = 0;
+      const str = String(bId + (formData.shopName || ''));
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      const shopNum = Math.abs(hash) % 90000 + 10000;
+      const shopId = 'SHOP-' + shopNum;
+
       const newBus = {
         id: bId,
+        shopId: shopId,
         name: formData.shopName || 'New Shop',
         ownerName: formData.fullName || 'Shop Owner',
         username: formData.username || ('user' + Math.floor(Math.random() * 1000)),
@@ -3737,8 +3785,19 @@
     getShopId() {
       const activeBiz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
       if (activeBiz) {
-        if (!activeBiz.shopId) {
-          activeBiz.shopId = 'SHOP-90812';
+        if (!activeBiz.shopId || (activeBiz.shopId === 'SHOP-90812' && activeBiz.id !== 'BUS_LJS')) {
+          if (activeBiz.id === 'BUS_LJS') {
+            activeBiz.shopId = 'SHOP-90812';
+          } else {
+            let hash = 0;
+            const str = String(activeBiz.id || activeBiz.name || activeBiz.slug || 'SHOP');
+            for (let i = 0; i < str.length; i++) {
+              hash = ((hash << 5) - hash) + str.charCodeAt(i);
+              hash |= 0;
+            }
+            const num = Math.abs(hash) % 90000 + 10000;
+            activeBiz.shopId = 'SHOP-' + num;
+          }
           this.saveState();
         }
         return activeBiz.shopId;
@@ -3748,34 +3807,43 @@
 
     getStaffAccounts() {
       const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
-      const bId = biz ? biz.id : 'BUS_LJS';
+      const bId = biz ? biz.id : this.getActiveBusinessId();
+      const shopId = this.getShopId();
       if (!this.state.staffAccounts) {
-        this.state.staffAccounts = [
-          {
-            id: 'STAFF-101',
-            businessId: bId,
-            shopId: this.getShopId(),
-            name: 'Ramesh Kumar',
-            phone: '9876543210',
-            role: 'Billing Staff',
-            username: 'STAFF-101',
-            passcode: '123456',
-            createdAt: new Date().toISOString()
-          }
-        ];
+        if (bId === 'BUS_LJS') {
+          this.state.staffAccounts = [
+            {
+              id: 'STAFF-101',
+              businessId: 'BUS_LJS',
+              business_id: 'BUS_LJS',
+              shopId: 'SHOP-90812',
+              name: 'Ramesh Kumar',
+              phone: '9876543210',
+              role: 'Billing Staff',
+              username: 'STAFF-101',
+              passcode: '123456',
+              createdAt: new Date().toISOString()
+            }
+          ];
+        } else {
+          this.state.staffAccounts = [];
+        }
         this.saveState();
       }
-      return this.state.staffAccounts.filter(s => s.businessId === bId || s.shopId === this.getShopId());
+      return this.state.staffAccounts.filter(s =>
+        !s.isDeleted && (s.businessId === bId || s.business_id === bId)
+      );
     }
 
     createStaffAccount({ name, phone, role }) {
       const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
-      const bId = biz ? biz.id : 'BUS_LJS';
+      const bId = biz ? biz.id : this.getActiveBusinessId();
       const shopId = this.getShopId();
       if (!this.state.staffAccounts) this.state.staffAccounts = [];
 
       // Auto-generate Staff User ID & Passcode
-      const count = this.state.staffAccounts.length + 101;
+      const bizStaff = this.state.staffAccounts.filter(s => s.businessId === bId || s.business_id === bId);
+      const count = bizStaff.length + 101;
       const staffUserId = 'STAFF-' + count;
       const passcode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -3801,9 +3869,10 @@
       if (!this.state.employees) this.state.employees = [];
 
       const existingEmp = this.state.employees.find(e =>
-        (e.id && e.id === staffUserId) ||
+        (e.business_id === bId || e.businessId === bId) &&
+        ((e.id && e.id === staffUserId) ||
         (cleanPhone && String(e.phone || '').replace(/\D/g, '') === cleanPhone) ||
-        (cleanName && e.name && e.name.toLowerCase().trim() === cleanName.toLowerCase())
+        (cleanName && e.name && e.name.toLowerCase().trim() === cleanName.toLowerCase()))
       );
 
       if (existingEmp) {
