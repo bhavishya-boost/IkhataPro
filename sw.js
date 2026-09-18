@@ -1,6 +1,6 @@
-/* iKhataPro Service Worker — Production PWA Shell v2 */
+/* iKhataPro Service Worker — Production PWA Shell v4 */
 
-const CACHE_NAME = 'ikhatapro-cache-v2';
+const CACHE_NAME = 'ikhatapro-cache-v4';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
@@ -27,6 +27,7 @@ const URLS_TO_CACHE = [
   '/js/modules/analytics.js',
   '/js/modules/copilot.js',
   '/js/modules/search.js',
+  '/js/modules/storefront.js',
   '/js/app.js'
 ];
 
@@ -66,24 +67,20 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Static assets: Cache first, fallback to network
+  // Network first for app assets to ensure live development updates
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(e.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
-        }
+    fetch(e.request).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(e.request, responseToCache);
         });
-        return networkResponse;
-      }).catch(() => {
-        // Return offline fallback if network fails
-        if (e.request.headers.get('accept').includes('text/html')) {
+      }
+      return networkResponse;
+    }).catch(() => {
+      return caches.match(e.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        if (e.request.headers.get('accept') && e.request.headers.get('accept').includes('text/html')) {
           return caches.match('/index.html');
         }
       });

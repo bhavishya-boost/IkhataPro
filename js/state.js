@@ -687,7 +687,7 @@
     toggleProductOnlineVisibility(productId) {
       const bId = this.getActiveBusinessId();
       if (!this.state.products) return false;
-      const prod = this.state.products.find(p => p.id === productId && p.business_id === bId);
+      const prod = this.state.products.find(p => p.id === productId && ((p.business_id || p.businessId) === bId || (bId === 'BUS_LJS' && !p.business_id && !p.businessId)));
       if (prod) {
         prod.isOnlineVisible = prod.isOnlineVisible === false ? true : false;
         this.saveState();
@@ -923,8 +923,25 @@
     }
 
     getProducts(includeDeleted = false) {
+      return this.getProductsForBusiness(this.getActiveBusinessId(), includeDeleted);
+    }
+
+    getProductsForBusiness(busId, includeDeleted = false) {
       if (!this.state.products) this.state.products = [];
-      const prods = this.state.products.filter(p => this.isRecordForActiveBusiness(p) && (includeDeleted || !p.isDeleted));
+      const targetBId = busId || this.getActiveBusinessId();
+      const isDemo = targetBId === 'BUS_LJS' || targetBId === 'BUS_SHARMA';
+      const cachedUuid = (window.iKhataSupabase && window.iKhataSupabase.cachedBusinessUuid) ? window.iKhataSupabase.cachedBusinessUuid : null;
+
+      const prods = this.state.products.filter(p => {
+        if (!p || (!includeDeleted && p.isDeleted)) return false;
+        const recBId = p.business_id || p.businessId;
+        if (!isDemo) {
+          if (!recBId || recBId === 'BUS_LJS' || recBId === 'BUS_SHARMA') return false;
+          return recBId === targetBId || (cachedUuid && recBId === cachedUuid);
+        }
+        if (!recBId) return targetBId === 'BUS_LJS';
+        return recBId === targetBId || (cachedUuid && recBId === cachedUuid);
+      });
 
       const seen = new Set();
       const deduped = [];

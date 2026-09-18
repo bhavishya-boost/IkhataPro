@@ -149,14 +149,42 @@ window.iKhataPOS = {
               </div>
             </div>
 
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.iKhataPOS.loadOnlineOrderToCart('${o.id}');">
-                ⚡ Accept & Load into POS Cart
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataPOS.openOnlineOrdersModal();">
-                🚚 Dispatch
-              </button>
-            </div>
+            ${o.status === 'Pending' ? `
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.iKhataPOS.loadOnlineOrderToCart('${o.id}');">
+                  ⚡ Accept & Load into POS Cart
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataPOS.openOnlineOrdersModal();">
+                  🚚 Dispatch
+                </button>
+              </div>
+            ` : o.status === 'Processing' ? `
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span style="font-size: 0.85rem; font-weight: 600; color: #f59e0b; flex: 1;">⏳ In POS Cart</span>
+                <button class="btn btn-success btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Completed'); window.iKhataUI.showToast('✓ Order #${o.id} marked as completed', 'success'); window.iKhataPOS.openOnlineOrdersModal();">
+                  ✓ Mark Completed
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataPOS.openOnlineOrdersModal();">
+                  🚚 Dispatch
+                </button>
+              </div>
+            ` : o.status === 'Dispatched' ? `
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary); flex: 1;">🚚 Out for Delivery</span>
+                <button class="btn btn-success btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Completed'); window.iKhataUI.showToast('✓ Order #${o.id} delivered & completed', 'success'); window.iKhataPOS.openOnlineOrdersModal();">
+                  ✓ Mark Delivered
+                </button>
+              </div>
+            ` : `
+              <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px;">
+                <span style="color: var(--success); font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                  <span>✅</span> Order Completed & Fulfilled
+                </span>
+                <button class="btn btn-outline btn-sm" style="font-size: 0.75rem; padding: 4px 8px;" onclick="window.iKhataPOS.loadOnlineOrderToCart('${o.id}'); window.iKhataUI.closeModal();">
+                  Re-order in POS
+                </button>
+              </div>
+            `}
           </div>
         `).join('')}
       </div>

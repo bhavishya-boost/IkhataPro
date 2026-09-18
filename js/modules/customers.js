@@ -141,7 +141,7 @@ window.iKhataCustomers = {
               ${formatCurrency(customer.balance)}
             </div>
             <div style="font-size: 0.8rem; font-weight: 700; color: ${customer.balance > 0 ? 'var(--danger)' : (customer.balance < 0 ? 'var(--success)' : 'var(--text-muted)')};">
-              ${customer.balance > 0 ? '🔴 AAPKO LENE HAIN (UDHAR)' : (customer.balance < 0 ? '🟢 RECEIVED' : 'SETTLED')}
+              ${customer.balance > 0 ? '🔴 AAPKO LENE HAIN (UDHAR)' : (customer.balance < 0 ? '🟢 AAPKO DENE HAIN (ADVANCE)' : 'SETTLED')}
             </div>
           </div>
         </div>

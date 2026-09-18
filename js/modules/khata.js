@@ -9,11 +9,21 @@ window.iKhataModule = {
     const formatCurrency = (amt) => canViewBalances ? ('₹' + Math.abs(amt || 0).toLocaleString('en-IN')) : '₹ ***';
     const bus = window.iKhataStore.getCurrentBusiness();
     let customers = window.iKhataStore.getCustomers();
+    const transactions = window.iKhataStore.getTransactions() || [];
+
+    // Calculate total payments received (GOT / JAMA) across all customers for this business
+    const totalReceived = transactions
+      .filter(t => (t.type === 'GOT' || t.type === 'JAMA') && !t.isDeleted)
+      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+
+    const totalUdharGiven = transactions
+      .filter(t => (t.type === 'GAVE' || t.type === 'UDHAR') && !t.isDeleted)
+      .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
 
     if (this.currentTab === 'GET') {
       customers = customers.filter(c => c.balance > 0);
     } else if (this.currentTab === 'GIVE') {
-      customers = customers.filter(c => c.balance < 0);
+      customers = customers.filter(c => c.balance <= 0);
     }
 
     if (this.searchQuery) {
@@ -40,19 +50,21 @@ window.iKhataModule = {
       </div>
 
       <!-- Top Balances Banner -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-        <div style="background: var(--danger-light); border: 1px solid var(--danger-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--danger); text-transform: uppercase;">🔴 AAPKO LENE HAIN (UDHAR)</span>
-          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--danger);">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px;">
+        <div style="background: var(--danger-light); border: 1px solid var(--danger-border); border-radius: var(--radius-lg); padding: 18px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;">🔴 AAPKO LENE HAIN (PENDING UDHAR)</span>
+          <span style="font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800; color: var(--danger); margin-top: 4px;">
             ${formatCurrency(bus.toReceiveTotal)}
           </span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Pending from ${allCust.filter(c => c.balance > 0).length} customer(s)</span>
         </div>
 
-        <div style="background: var(--success-light); border: 1px solid var(--success-border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: var(--success); text-transform: uppercase;">🟢 RECEIVED</span>
-          <span style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--success);">
-            ${formatCurrency(bus.toGiveTotal)}
+        <div style="background: var(--success-light); border: 1px solid var(--success-border); border-radius: var(--radius-lg); padding: 18px; display: flex; flex-direction: column;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.5px;">🟢 TOTAL RECEIVED (JAMA AAYE)</span>
+          <span style="font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800; color: var(--success); margin-top: 4px;">
+            ${formatCurrency(totalReceived)}
           </span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Total payments collected from customers</span>
         </div>
       </div>
 
@@ -68,10 +80,10 @@ window.iKhataModule = {
               ALL (${allCust.length})
             </button>
             <button class="tab-btn ${this.currentTab === 'GET' ? 'active' : ''}" onclick="window.iKhataModule.currentTab = 'GET'; window.iKhataUI.refresh();">
-              🔴 AAPKO LENE HAIN (${allCust.filter(c=>c.balance>0).length})
+              🔴 AAPKO LENE HAIN (${allCust.filter(c => c.balance > 0).length})
             </button>
             <button class="tab-btn ${this.currentTab === 'GIVE' ? 'active' : ''}" onclick="window.iKhataModule.currentTab = 'GIVE'; window.iKhataUI.refresh();">
-              🟢 RECEIVED (${allCust.filter(c=>c.balance<0).length})
+              🟢 SETTLED / ADVANCE (${allCust.filter(c => c.balance <= 0).length})
             </button>
           </div>
         </div>
@@ -88,42 +100,50 @@ window.iKhataModule = {
               <span>➕</span> Add Customer
             </button>
           </div>
-        ` : customers.map(c => `
-          <div class="customer-item-card">
-            <div class="customer-avatar" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">${c.name.charAt(0)}</div>
-            <div class="customer-details" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="customer-name">${c.name}</span>
-                <span class="badge ${c.category === 'VIP' ? 'badge-ai' : (c.category === 'At Risk' ? 'badge-warning' : 'badge-neutral')}">${c.category}</span>
-              </div>
-              <div class="customer-meta">
-                <span>📱 ${c.phone}</span>
-                <span>•</span>
-                <span>Last active: ${c.lastActive}</span>
-              </div>
-            </div>
+        ` : customers.map(c => {
+          const custTx = transactions.filter(t => t.customerId === c.id && !t.isDeleted);
+          const custReceived = custTx
+            .filter(t => t.type === 'GOT' || t.type === 'JAMA')
+            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
 
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <div class="customer-balance-box" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">
-                <div class="balance-amount ${c.balance > 0 ? 'give' : (c.balance < 0 ? 'get' : 'neutral')}">
-                  ${formatCurrency(c.balance)}
+          return `
+            <div class="customer-item-card">
+              <div class="customer-avatar" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">${c.name.charAt(0)}</div>
+              <div class="customer-details" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="customer-name">${c.name}</span>
+                  <span class="badge ${c.category === 'VIP' ? 'badge-ai' : (c.category === 'At Risk' ? 'badge-warning' : 'badge-neutral')}">${c.category}</span>
                 </div>
-                <div class="balance-label">
-                  ${c.balance > 0 ? '🔴 AAPKO LENE HAIN' : (c.balance < 0 ? '🟢 RECEIVED' : 'SETTLED')}
+                <div class="customer-meta">
+                  <span>📱 ${c.phone}</span>
+                  <span>•</span>
+                  <span>Last active: ${c.lastActive}</span>
+                  ${custReceived > 0 ? `<span>•</span><span style="color: var(--success); font-weight: 600;">Total Received: ${formatCurrency(custReceived)}</span>` : ''}
                 </div>
               </div>
 
-              <div style="display: flex; gap: 6px;">
-                ${c.balance > 0 ? `
-                  <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.openReminderModal('${c.id}')">💬 Remind</button>
-                  <button class="btn btn-success btn-sm" onclick="window.iKhataUI.openReceivePaymentModal('${c.id}')">💰 Receive</button>
-                ` : `
-                  <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">👁️ View</button>
-                `}
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="customer-balance-box" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">
+                  <div class="balance-amount ${c.balance > 0 ? 'give' : (c.balance < 0 ? 'get' : 'neutral')}">
+                    ${formatCurrency(c.balance)}
+                  </div>
+                  <div class="balance-label">
+                    ${c.balance > 0 ? '🔴 AAPKO LENE HAIN' : (c.balance < 0 ? '🟢 ADVANCE' : 'SETTLED')}
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 6px;">
+                  ${c.balance > 0 ? `
+                    <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.openReminderModal('${c.id}')">💬 Remind</button>
+                    <button class="btn btn-success btn-sm" onclick="window.iKhataUI.openReceivePaymentModal('${c.id}')">💰 Receive</button>
+                  ` : `
+                    <button class="btn btn-outline btn-sm" onclick="window.iKhataUI.openCustomerProfile('${c.id}')">👁️ View</button>
+                  `}
+                </div>
               </div>
             </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     `;
   }

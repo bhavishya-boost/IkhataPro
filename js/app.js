@@ -112,13 +112,15 @@ window.iKhataUI = {
 
     if (hash.startsWith('#shop/')) {
       // Guest customer storefront — no auth required
-      const slug = hash.replace('#shop/', '').split('/')[0];
+      const slug = hash.replace('#shop/', '').split('/')[0].split('?')[0];
       this.storefrontSlug = slug;
       this.currentRoute = 'customer-store';
       this.currentView = 'workspace';
 
       // Auto-access business context for guest customer without overwriting active shop owner session
-      const bus = window.iKhataStore.state.businesses.find(b => b.slug === slug);
+      const bus = (window.iKhataStorefront && typeof window.iKhataStorefront.resolveBusiness === 'function') 
+        ? window.iKhataStorefront.resolveBusiness(slug) 
+        : (window.iKhataStore.state.businesses || []).find(b => b.slug === slug || b.id === slug);
       if (bus) {
         this.guestBusinessId = bus.id;
         const activeSession = window.iKhataStore.state.currentSession;

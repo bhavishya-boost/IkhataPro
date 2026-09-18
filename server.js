@@ -329,6 +329,11 @@ app.use(express.static(__dirname, {
   extensions: ['html'],
 }));
 
+// ── Storefront direct URL redirect support ──────────────────────────────────
+app.get(['/shop/:slug', '/store/:slug'], (req, res) => {
+  res.redirect(`/index.html#shop/${encodeURIComponent(req.params.slug)}`);
+});
+
 // Fallback for SPA routing — serve landing.html for unmatched routes
 app.get('*', (req, res) => {
   // If the request looks like an API call, return 404 JSON

@@ -6,6 +6,57 @@ window.iKhataStorefront = {
   selectedCategory: 'ALL',
   viewMode: 'MANAGER', // 'MANAGER' or 'CUSTOMER'
 
+  resolveBusiness(slug) {
+    const raw = String(slug || '').trim();
+    const cleanSlug = decodeURIComponent(raw).replace(/^#?\/?(shop\/)?/, '').split('/')[0].split('?')[0].trim().toLowerCase();
+    const businesses = (window.iKhataStore && window.iKhataStore.state && window.iKhataStore.state.businesses) || [];
+    const activeBus = (window.iKhataStore && typeof window.iKhataStore.getCurrentBusiness === 'function') 
+      ? window.iKhataStore.getCurrentBusiness() 
+      : null;
+    
+    if (cleanSlug) {
+      // 1. Highest priority: If currently active business in session matches this slug/id/name, return it immediately
+      if (activeBus) {
+        if (
+          (activeBus.slug && activeBus.slug.toLowerCase() === cleanSlug) ||
+          (activeBus.id && activeBus.id.toLowerCase() === cleanSlug) ||
+          (activeBus.shopId && activeBus.shopId.toLowerCase().replace(/\s+/g, '') === cleanSlug.replace(/\s+/g, '')) ||
+          (activeBus.name && activeBus.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') === cleanSlug) ||
+          (activeBus.name && activeBus.name.toLowerCase().trim() === cleanSlug)
+        ) {
+          return activeBus;
+        }
+      }
+
+      // 2. Sort businesses so custom/real registered merchant businesses come BEFORE default demo accounts
+      const sortedBusinesses = [...businesses].sort((a, b) => {
+        const aIsDemo = a.id === 'BUS_LJS' || a.id === 'BUS_SHARMA';
+        const bIsDemo = b.id === 'BUS_LJS' || b.id === 'BUS_SHARMA';
+        if (aIsDemo && !bIsDemo) return 1;
+        if (!aIsDemo && bIsDemo) return -1;
+        return 0;
+      });
+
+      // 3. Exact slug match
+      let found = sortedBusinesses.find(b => b.slug && b.slug.toLowerCase() === cleanSlug);
+      // 4. Exact ID match (e.g. BUS_172...)
+      if (!found) found = sortedBusinesses.find(b => b.id && b.id.toLowerCase() === cleanSlug);
+      // 5. Exact Shop ID match (e.g. SHOP-90812)
+      if (!found) found = sortedBusinesses.find(b => b.shopId && b.shopId.toLowerCase().replace(/\s+/g, '') === cleanSlug.replace(/\s+/g, ''));
+      // 6. Match by exact store Name slugified (e.g. "Ayushi Market" -> "ayushi-market" or just "ayushi")
+      if (!found) found = sortedBusinesses.find(b => b.name && b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') === cleanSlug);
+      // 7. Match by full name
+      if (!found) found = sortedBusinesses.find(b => b.name && b.name.toLowerCase().trim() === cleanSlug);
+      // 8. Match by first word of name (preferring real merchants)
+      if (!found) found = sortedBusinesses.find(b => b.name && b.name.toLowerCase().split(/[^a-z0-9]/)[0] === cleanSlug);
+
+      if (found) return found;
+    }
+
+    // Fallback: active session business, then custom non-demo business, then first business
+    return activeBus || businesses.find(b => b.id !== 'BUS_LJS' && b.id !== 'BUS_SHARMA') || businesses[0] || null;
+  },
+
   render(state) {
     return this.renderManager(state);
   },
@@ -17,12 +68,17 @@ window.iKhataStorefront = {
   // --- MERCHANT DASHBOARD VIEW ---
   renderManager(state) {
     const bus = window.iKhataStore.getCurrentBusiness();
+    if (!bus) return `<div class="card"><p>No active business found.</p></div>`;
     const products = window.iKhataStore.getProducts();
     const orders = window.iKhataStore.getOnlineOrders();
     const pendingOrders = orders.filter(o => o.status === 'Pending');
     const onlineProductsCount = products.filter(p => p.isOnlineVisible !== false).length;
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
-    const storeUrl = `${window.location.origin}${window.location.pathname}#shop/${bus.slug}`;
+    const origin = window.location.origin;
+    // Generate a clean, resolvable slug: prefer bus.slug, else slugify name, else use id
+    const rawSlug = bus.slug || (bus.name ? bus.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') : bus.id);
+    const storeSlug = encodeURIComponent(rawSlug);
+    const storeUrl = `${origin}/index.html#shop/${storeSlug}`;
 
     return `
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
@@ -108,7 +164,7 @@ window.iKhataStorefront = {
         <div class="card" style="padding: 16px;">
           <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">WHATSAPP ORDER NO.</div>
           <div style="font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--success); margin-top: 6px;">
-            +${bus.whatsappNumber || 'Not Set'}
+            +${bus.whatsappNumber || bus.mobile || 'Not Set'}
           </div>
         </div>
       </div>
@@ -126,7 +182,7 @@ window.iKhataStorefront = {
 
         ${orders.length === 0 ? `
           <div style="text-align: center; padding: 24px; background: var(--bg-subtle); border-radius: 8px;">
-            <div style="font-size: 2rem; margin-bottom: 8px;">🛍️</div>
+            <div style="font-size: 2rem; margin-bottom: 8px;">🛒</div>
             <div style="font-weight: 600; color: var(--text-main);">No Online Orders Yet</div>
             <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Orders placed by customers on your Online Dukaan link will appear here.</div>
           </div>
@@ -156,14 +212,42 @@ window.iKhataStorefront = {
                   </div>
                 </div>
 
-                <div style="display: flex; gap: 8px;">
-                  <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.iKhataUI.navigate('pos'); setTimeout(() => window.iKhataPOS.loadOnlineOrderToCart('${o.id}'), 100);">
-                    ⚡ Accept & Load into POS Cart
-                  </button>
-                  <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataUI.refresh();">
-                    🚚 Dispatch
-                  </button>
-                </div>
+                ${o.status === 'Pending' ? `
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="window.iKhataUI.navigate('pos'); setTimeout(() => window.iKhataPOS.loadOnlineOrderToCart('${o.id}'), 100);">
+                      ⚡ Accept & Load into POS Cart
+                    </button>
+                    <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataUI.refresh();">
+                      🚚 Dispatch
+                    </button>
+                  </div>
+                ` : o.status === 'Processing' ? `
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: #f59e0b; flex: 1;">⏳ In Process / In POS</span>
+                    <button class="btn btn-success btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Completed'); window.iKhataUI.showToast('✓ Order #${o.id} marked as completed', 'success'); window.iKhataUI.refresh();">
+                      ✓ Mark Completed
+                    </button>
+                    <button class="btn btn-outline btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Dispatched'); window.iKhataUI.showToast('✓ Order #${o.id} marked as dispatched', 'success'); window.iKhataUI.refresh();">
+                      🚚 Dispatch
+                    </button>
+                  </div>
+                ` : o.status === 'Dispatched' ? `
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary); flex: 1;">🚚 Out for Delivery</span>
+                    <button class="btn btn-success btn-sm" onclick="window.iKhataStore.updateOrderStatus('${o.id}', 'Completed'); window.iKhataUI.showToast('✓ Order #${o.id} delivered & completed', 'success'); window.iKhataUI.refresh();">
+                      ✓ Mark Delivered
+                    </button>
+                  </div>
+                ` : `
+                  <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px;">
+                    <span style="color: var(--success); font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                      <span>✅</span> Order Completed & Fulfilled
+                    </span>
+                    <button class="btn btn-outline btn-sm" style="font-size: 0.75rem; padding: 4px 8px;" onclick="window.iKhataPOS.loadOnlineOrderToCart('${o.id}'); window.iKhataUI.navigate('pos');">
+                      Re-order in POS
+                    </button>
+                  </div>
+                `}
               </div>
             `).join('')}
           </div>
@@ -260,14 +344,17 @@ window.iKhataStorefront = {
 
   openPrintQRModal() {
     const bus = window.iKhataStore.getCurrentBusiness();
-    const storeUrl = `${window.location.origin}${window.location.pathname}#shop/${bus.slug}`;
+    if (!bus) return;
+    const origin = window.location.origin;
+    const storeSlug = encodeURIComponent(bus.slug || bus.id);
+    const storeUrl = `${origin}/index.html#shop/${storeSlug}`;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(storeUrl)}`;
 
     window.iKhataUI.openModal('Print Storefront Counter Standee', `
       <div style="text-align: center; padding: 10px;">
         <div style="font-size: 2.2rem;">${bus.logo || '🏪'}</div>
         <h2 style="font-size: 1.4rem; margin-top: 4px; color: var(--text-main);">${bus.name}</h2>
-        <p style="color: var(--text-muted); font-size: 0.85rem;">${bus.address}</p>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">${bus.address || ''}</p>
 
         <div style="margin: 20px auto; display: inline-block; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
           <img src="${qrApiUrl}" alt="Store QR Code" style="width: 200px; height: 200px; display: block;">
@@ -294,26 +381,46 @@ window.iKhataStorefront = {
 
   // --- GUEST CUSTOMER STANDALONE E-COMMERCE SHOP VIEW ---
   renderCustomerStore(slug) {
-    const businesses = window.iKhataStore.state.businesses;
-    const bus = businesses.find(b => b.slug === slug) || window.iKhataStore.getCurrentBusiness();
-    const products = window.iKhataStore.state.products.filter(p => p.business_id === bus.id && p.isOnlineVisible !== false);
+    const bus = this.resolveBusiness(slug);
+    if (!bus) {
+      return `
+        <div style="max-width: 600px; margin: 60px auto; text-align: center; padding: 32px;" class="card">
+          <div style="font-size: 3rem; margin-bottom: 12px;">🏪</div>
+          <h2>Store Not Found</h2>
+          <p style="color: var(--text-muted); margin-top: 8px;">The online store you are looking for does not exist or has moved.</p>
+          <a href="index.html#welcome" class="btn btn-primary" style="margin-top: 16px; display: inline-block;">Return Home</a>
+        </div>
+      `;
+    }
+
+    let products = [];
+    if (window.iKhataStore) {
+      if (typeof window.iKhataStore.getProductsForBusiness === 'function') {
+        products = window.iKhataStore.getProductsForBusiness(bus.id, false);
+      } else if (typeof window.iKhataStore.getProducts === 'function') {
+        products = window.iKhataStore.getProducts(false);
+      }
+      products = (products || []).filter(p => p && p.isOnlineVisible !== false);
+    }
     
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
-    const categories = ['ALL', ...new Set(products.map(p => p.category))];
+    const categories = ['ALL', ...new Set(products.map(p => p.category || 'General').filter(Boolean))];
 
     let filtered = products;
     if (this.selectedCategory !== 'ALL') {
-      filtered = filtered.filter(p => p.category === this.selectedCategory);
+      filtered = filtered.filter(p => (p.category || 'General') === this.selectedCategory);
     }
     if (this.customerSearchQuery) {
       const q = this.customerSearchQuery.toLowerCase();
-      filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
+      filtered = filtered.filter(p => (p.name && p.name.toLowerCase().includes(q)) || (p.description && p.description.toLowerCase().includes(q)));
     }
 
     const cartCount = this.cart.reduce((sum, i) => sum + i.qty, 0);
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
-    const storeUrl = `${window.location.origin}${window.location.pathname}#shop/${bus.slug}`;
-    const waNumber = bus.whatsappNumber || '919216953892';
+    const origin = window.location.origin;
+    const storeSlug = encodeURIComponent(bus.slug || bus.id);
+    const storeUrl = `${origin}/index.html#shop/${storeSlug}`;
+    const waNumber = bus.whatsappNumber || bus.mobile || '919216953892';
 
     return `
       <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 90px;">
@@ -327,9 +434,9 @@ window.iKhataStorefront = {
               </div>
               <div>
                 <h1 style="font-size: 1.6rem; color: white; margin: 0; font-weight: 800;">${bus.name}</h1>
-                <p style="font-size: 0.9rem; opacity: 0.95; margin-top: 2px;">${bus.storeTagline || bus.address}</p>
+                <p style="font-size: 0.9rem; opacity: 0.95; margin-top: 2px;">${bus.storeTagline || bus.address || 'Welcome to our online store'}</p>
                 <div style="font-size: 0.8rem; opacity: 0.85; margin-top: 4px; display: flex; align-items: center; gap: 8px;">
-                  <span>📍 ${bus.city}, ${bus.state}</span>
+                  <span>📍 ${bus.city || ''}${bus.city && bus.state ? ', ' : ''}${bus.state || ''}</span>
                   <span>•</span>
                   <span>🚚 Delivery: ${formatCurrency(bus.deliveryFee || 0)}</span>
                 </div>
@@ -416,7 +523,7 @@ window.iKhataStorefront = {
               </div>
             </div>
 
-            <button class="btn btn-primary btn-lg" onclick="window.iKhataStorefront.openCheckoutModal('${bus.slug}')">
+            <button class="btn btn-primary btn-lg" onclick="window.iKhataStorefront.openCheckoutModal('${bus.slug || bus.id}')">
               🛒 Checkout & Order →
             </button>
           </div>
@@ -427,7 +534,9 @@ window.iKhataStorefront = {
   },
 
   addToCart(productId) {
-    const prod = window.iKhataStore.state.products.find(p => p.id === productId);
+    const prod = (window.iKhataStore && window.iKhataStore.state && window.iKhataStore.state.products)
+      ? window.iKhataStore.state.products.find(p => p.id === productId)
+      : null;
     if (!prod) return;
     const existing = this.cart.find(c => c.id === productId);
     if (existing) {
@@ -450,8 +559,8 @@ window.iKhataStorefront = {
   },
 
   openCheckoutModal(slug) {
-    const bus = (slug && window.iKhataStore.state.businesses ? window.iKhataStore.state.businesses.find(b => b.slug === slug) : null) || window.iKhataStore.getCurrentBusiness() || {};
-    const busSlug = bus.slug || slug || '';
+    const bus = this.resolveBusiness(slug) || (window.iKhataStore && window.iKhataStore.getCurrentBusiness()) || {};
+    const busSlug = bus.slug || bus.id || slug || '';
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
     const deliveryFee = bus.deliveryFee || 0;
     const total = cartSubtotal + deliveryFee;
@@ -510,7 +619,7 @@ window.iKhataStorefront = {
 
   submitOrder(form, slug) {
     const data = new FormData(form);
-    const bus = (slug && window.iKhataStore.state.businesses ? window.iKhataStore.state.businesses.find(b => b.slug === slug) : null) || window.iKhataStore.getCurrentBusiness() || {};
+    const bus = this.resolveBusiness(slug) || (window.iKhataStore && window.iKhataStore.getCurrentBusiness()) || {};
     const cartSubtotal = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
     const deliveryFee = bus.deliveryFee || 0;
     const total = cartSubtotal + deliveryFee;
@@ -531,7 +640,7 @@ window.iKhataStorefront = {
     this.cart = []; // clear cart
     window.iKhataUI.closeModal();
 
-    const waNumber = bus.whatsappNumber || '919216953892';
+    const waNumber = bus.whatsappNumber || bus.mobile || '919216953892';
 
     if (paymentMethod === 'WhatsApp') {
       const itemsList = order.items.map(i => `• ${i.name} (${i.qty}x) = ₹${i.price * i.qty}`).join('%0A');
