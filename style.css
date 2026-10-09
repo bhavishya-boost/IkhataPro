@@ -195,4 +195,24 @@
   40%, 80% { transform: translateX(6px); }
 }
 
+/* ── Staff Privacy & Restricted View Hiding Rules ───────────────────────────── */
+body.staff-mode-active .staff-hide,
+body.staff-mode-active #btn-switch-role,
+body.staff-mode-active [data-route="pnl"],
+body.staff-mode-active [data-route="expenses"],
+body.staff-mode-active [data-route="suppliers"],
+body.staff-mode-active [data-route="analytics"],
+body.staff-mode-active [data-route="simulator"],
+body.staff-mode-active [data-route="statement-generator"],
+body.staff-mode-active [data-route="collection-map"],
+body.staff-mode-active [data-route="gullak"],
+body.staff-mode-active [data-route="po"],
+body.staff-mode-active [data-route="employees"] {
+  display: none !important;
+}
+
+/* Staff credential modal chip hover highlight */
+.cred-chip:hover {
+  filter: brightness(1.1);
+}
 

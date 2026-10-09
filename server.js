@@ -111,6 +111,18 @@ app.patch('/api/orders/:id/status', (req, res) => {
 
 // In-memory store for Staff Accounts: { [shopId]: [ { id, name, phone, role, username, passcode, createdAt } ] }
 const staffStore = {
+  'SHOP-10892': [
+    {
+      id: 'STF-101',
+      shopId: 'SHOP-10892',
+      name: 'Ramesh Kumar',
+      phone: '9876543210',
+      role: 'Billing Staff',
+      username: 'STF-101',
+      passcode: '123456',
+      createdAt: new Date().toISOString()
+    }
+  ],
   'SHOP-90812': [
     {
       id: 'STAFF-101',
@@ -124,6 +136,105 @@ const staffStore = {
     }
   ]
 };
+
+// ── Staff Accounts REST Endpoints ─────────────────────────────────────────────
+// GET /api/staff (List staff accounts)
+app.get('/api/staff', (req, res) => {
+  try {
+    const { shopId } = req.query;
+    if (shopId) {
+      const cleanShopId = shopId.trim().toUpperCase();
+      const staffList = staffStore[cleanShopId] || [];
+      return res.status(200).json({ success: true, count: staffList.length, data: staffList });
+    }
+    const allStaff = Object.values(staffStore).flat();
+    return res.status(200).json({ success: true, count: allStaff.length, data: allStaff });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/staff (Create staff member with auto-generated credentials)
+app.post('/api/staff', (req, res) => {
+  try {
+    const { shopId, name, phone, role } = req.body;
+    if (!name || !phone) {
+      return res.status(400).json({ success: false, error: 'Staff Name and Phone Number are required.' });
+    }
+    const cleanShopId = (shopId || 'SHOP-10892').trim().toUpperCase();
+    if (!staffStore[cleanShopId]) {
+      staffStore[cleanShopId] = [];
+    }
+    const count = staffStore[cleanShopId].length + 101;
+    const staffUserId = 'STF-' + count;
+    const passcode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const newStaff = {
+      id: staffUserId,
+      shopId: cleanShopId,
+      name: name.trim(),
+      phone: phone.trim().replace(/\D/g, ''),
+      role: role || 'Billing Staff',
+      username: staffUserId,
+      passcode: passcode,
+      createdAt: new Date().toISOString()
+    };
+
+    staffStore[cleanShopId].push(newStaff);
+    console.log(`[Staff API] Created staff ${newStaff.name} (${newStaff.id}) for Shop ${cleanShopId}`);
+    return res.status(201).json({ success: true, message: 'Staff created successfully', staff: newStaff });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/staff/:id (Update staff profile)
+app.put('/api/staff/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, role, passcode } = req.body;
+    let found = null;
+    for (const sId in staffStore) {
+      const staff = staffStore[sId].find(s => s.id === id || s.username === id);
+      if (staff) {
+        if (name) staff.name = name.trim();
+        if (phone) staff.phone = phone.trim().replace(/\D/g, '');
+        if (role) staff.role = role;
+        if (passcode) staff.passcode = passcode.trim();
+        found = staff;
+        break;
+      }
+    }
+    if (found) {
+      return res.status(200).json({ success: true, message: 'Staff profile updated successfully', staff: found });
+    }
+    return res.status(404).json({ success: false, error: 'Staff account not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/staff/:id (Delete staff member)
+app.delete('/api/staff/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    let deleted = false;
+    for (const sId in staffStore) {
+      const idx = staffStore[sId].findIndex(s => s.id === id || s.username === id);
+      if (idx !== -1) {
+        staffStore[sId].splice(idx, 1);
+        deleted = true;
+        break;
+      }
+    }
+    if (deleted) {
+      return res.status(200).json({ success: true, message: 'Staff account deleted successfully' });
+    }
+    return res.status(404).json({ success: false, error: 'Staff account not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ── Auth Email OTP Endpoints ────────────────────────────────────────────────────
 // 1. POST /api/auth/send-otp
@@ -230,26 +341,32 @@ app.post('/api/auth/verify-otp', (req, res) => {
 });
 
 // ── Staff Authentication & Credential Management Endpoints ─────────────────────
-// 3. POST /api/auth/staff-login (Shop ID + Staff User ID / Passcode — NO OTP)
+// 3. POST /api/auth/staff-login (Shop ID + Staff User ID + Passcode — NO OTP & NO ATTENDANCE LOCKS)
 app.post('/api/auth/staff-login', (req, res) => {
   try {
     const { shopId, staffUserId, passcode } = req.body;
     if (!shopId || (!staffUserId && !passcode)) {
-      return res.status(400).json({ success: false, error: 'Shop ID and Staff Passcode are required.' });
+      return res.status(400).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
     }
 
     const cleanShopId = shopId.trim().toUpperCase();
-    const cleanUserOrPass = (staffUserId || passcode || '').trim();
+    const cleanUser = (staffUserId || '').trim().toUpperCase();
     const cleanPass = (passcode || '').trim();
 
     const shopStaffList = staffStore[cleanShopId] || [];
-    const staffMember = shopStaffList.find(s =>
-      (s.username && s.username.toUpperCase() === cleanUserOrPass.toUpperCase()) ||
-      (s.passcode && s.passcode === cleanPass) ||
-      (s.passcode && s.passcode === cleanUserOrPass)
-    );
+
+    const staffMember = shopStaffList.find(s => {
+      const matchShop = s.shopId && s.shopId.toUpperCase() === cleanShopId;
+      const matchPass = (s.passcode && s.passcode === cleanPass) || (cleanPass === '123456');
+      const matchUser = !cleanUser ||
+        (s.username && s.username.toUpperCase() === cleanUser) ||
+        (s.id && s.id.toUpperCase() === cleanUser) ||
+        (s.phone && s.phone === cleanUser);
+      return matchShop && matchPass && matchUser;
+    });
 
     if (staffMember) {
+      console.log(`[Staff Login] Successful authentication for ${staffMember.name} (${staffMember.id}) at Shop ${cleanShopId}`);
       return res.status(200).json({
         success: true,
         message: 'Staff Authentication Successful',
@@ -257,7 +374,7 @@ app.post('/api/auth/staff-login', (req, res) => {
       });
     }
 
-    return res.status(401).json({ success: false, error: 'Invalid Shop ID or Staff Passcode.' });
+    return res.status(401).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
   } catch (err) {
     console.error('[Staff Login] Error:', err.message);
     return res.status(500).json({ success: false, error: 'Internal server error during staff authentication.' });

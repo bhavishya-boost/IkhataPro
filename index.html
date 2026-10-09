@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/khata.css">
   <link rel="stylesheet" href="css/onboarding.css">
   <link rel="stylesheet" href="css/features.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -73,26 +74,26 @@
         <div>
           <div class="nav-group-label">SMART TOOLS</div>
           <ul class="nav-list">
-            <li class="nav-item" onclick="window.iKhataGullak.openGullakModal()">
+            <li class="nav-item staff-hide" data-route="gullak" onclick="window.iKhataGullak.openGullakModal()">
               <span class="icon">💵</span> Daily Cash Gullak
             </li>
-            <li class="nav-item" onclick="window.iKhataPO.openPOModal()">
+            <li class="nav-item staff-hide" data-route="po" onclick="window.iKhataPO.openPOModal()">
               <span class="icon">🤖</span> AI Supplier PO
             </li>
-            <li class="nav-item" data-route="analytics" onclick="window.iKhataUI.navigate('analytics')">
+            <li class="nav-item staff-hide" data-route="analytics" onclick="window.iKhataUI.navigate('analytics')">
               <span class="icon">📊</span> Reports & AI Forecast
             </li>
-            <li class="nav-item" data-route="statement-generator"
+            <li class="nav-item staff-hide" data-route="statement-generator"
               onclick="window.iKhataUI.navigate('statement-generator')">
               <span class="icon">🧾</span> Custom Statements & Filters
             </li>
-            <li class="nav-item" data-route="simulator" onclick="window.iKhataUI.navigate('simulator')">
+            <li class="nav-item staff-hide" data-route="simulator" onclick="window.iKhataUI.navigate('simulator')">
               <span class="icon">⚙️</span> What-If Simulator
             </li>
-            <li class="nav-item" data-route="collection-map" onclick="window.iKhataUI.navigate('collection-map')">
+            <li class="nav-item staff-hide" data-route="collection-map" onclick="window.iKhataUI.navigate('collection-map')">
               <span class="icon">🗺️</span> Collection Route
             </li>
-            <li class="nav-item" data-route="employees" onclick="window.iKhataUI.navigate('employees')">
+            <li class="nav-item staff-hide" data-route="employees" onclick="window.iKhataUI.navigate('employees')">
               <span class="icon">👥</span> Employees & RBAC
             </li>
             <li class="nav-item" data-route="storefront" onclick="window.iKhataUI.navigate('storefront')">
@@ -131,7 +132,7 @@
         </div>
 
         <div class="header-right">
-          <button class="icon-btn" onclick="window.iKhataGullak.openGullakModal()" title="Daily Cash Gullak Counter">
+          <button class="icon-btn staff-hide" onclick="window.iKhataGullak.openGullakModal()" title="Daily Cash Gullak Counter">
             <span>💵</span>
           </button>
 
@@ -147,7 +148,7 @@
             <span>⌨️</span>
           </button>
 
-          <button class="icon-btn" onclick="window.iKhataUI.openSettingsModal()" title="Business Settings & Backup">
+          <button class="icon-btn staff-hide" onclick="window.iKhataUI.openSettingsModal()" title="Business Settings & Backup">
             <span>⚙️</span>
           </button>
 
@@ -161,7 +162,7 @@
             <span>🎙️</span>
           </button>
 
-          <button class="icon-btn" onclick="window.iKhataCopilot.toggle()" title="Ask AI Copilot">
+          <button class="icon-btn staff-hide" onclick="window.iKhataCopilot.toggle()" title="Ask AI Copilot">
             <span>🤖</span>
           </button>
 

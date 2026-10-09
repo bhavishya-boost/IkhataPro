@@ -257,31 +257,66 @@ window.iKhataUI = {
 
   async submitStaffLogin(form) {
     const shopIdInput = form.querySelector('[name="shopId"]');
+    const staffUserIdInput = form.querySelector('[name="staffUserId"]');
     const passcodeInput = form.querySelector('[name="passcode"]');
 
     const shopId = shopIdInput ? shopIdInput.value.trim() : '';
+    const staffUserId = staffUserIdInput ? staffUserIdInput.value.trim() : '';
     const passcode = passcodeInput ? passcodeInput.value.trim() : '';
 
     const errBox = document.getElementById('login-error-alert');
     if (errBox) errBox.style.display = 'none';
 
     if (!shopId) {
-      this.showToast('Please enter your Shop ID (e.g. SHOP-90812)', 'warning');
+      this.showToast('Please enter your Shop ID (e.g. SHOP-10892)', 'warning');
       return;
     }
-    if (!passcode) {
-      this.showToast('Please enter your Staff Passcode or User ID', 'warning');
+    if (!staffUserId && !passcode) {
+      this.showToast('Please enter your Staff User ID and Passcode', 'warning');
       return;
     }
 
-    // Direct staff authentication — NO OTP verification required for staff check-in
-    const result = window.iKhataStore.loginStaff(shopId, passcode);
+    // Direct staff authentication via API with fallback to local store — NO ATTENDANCE LOCKS
+    let result = null;
+    try {
+      const response = await fetch('/api/auth/staff-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId, staffUserId, passcode })
+      });
+      const data = await response.json();
+      if (data && data.success) {
+        result = { success: true, staff: data.staff };
+        // Sync session to local store
+        const biz = (window.iKhataStore.state.businesses || []).find(b =>
+          (b.shopId && b.shopId.toUpperCase() === shopId.toUpperCase()) || b.id === 'BUS_LJS'
+        ) || window.iKhataStore.state.businesses[0];
+        
+        window.iKhataStore.state.currentSession = {
+          isAuthenticated: true,
+          role: 'STAFF',
+          user: data.staff,
+          businessId: biz ? biz.id : 'BUS_LJS',
+          workspaceSlug: biz ? biz.slug : 'ljs-jewellers',
+          loginTime: new Date().toISOString()
+        };
+        window.iKhataStore.saveState();
+        result.business = biz;
+      }
+    } catch (err) {
+      console.warn('[submitStaffLogin] API check notice:', err.message);
+    }
+
+    if (!result || !result.success) {
+      // Fallback local store check
+      result = window.iKhataStore.loginStaff(shopId, passcode || staffUserId);
+    }
 
     if (result && result.success) {
       this.showToast(`🟢 Staff Check-in Successful! Logged in as ${result.staff.name}`, 'success');
       this.navigateToWorkspace(result.business ? result.business.slug : 'ljs-jewellers');
     } else {
-      const errMsg = (result && result.error) || 'Invalid Shop ID or Staff Passcode';
+      const errMsg = 'Invalid Shop ID, Staff ID, or Passcode.';
       if (errBox) {
         errBox.style.display = 'block';
         errBox.innerText = `⚠️ ${errMsg}`;
@@ -756,18 +791,26 @@ window.iKhataUI = {
             <div id="login-error-alert" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 16px;"></div>
 
             ${isStaff ? `
-              <!-- STAFF LOGIN FORM (NO OTP REQUIRED) -->
+              <!-- STAFF LOGIN FORM (NO OTP REQUIRED & NO ATTENDANCE LOCKS) -->
               <form onsubmit="event.preventDefault(); window.iKhataUI.submitStaffLogin(this);">
                 <div class="form-group">
                   <label class="form-label" style="font-weight: 700;">Shop ID <span class="required-asterisk">*</span></label>
                   <div class="input-with-icon">
                     <span class="input-icon-prefix">🏪</span>
-                    <input type="text" name="shopId" id="login-shop-id" class="form-input" placeholder="e.g. ${activeShopId}" value="${activeShopId}" required autofocus style="text-transform: uppercase; font-family: monospace; font-weight: 700; letter-spacing: 1px;">
+                    <input type="text" name="shopId" id="login-shop-id" class="form-input" placeholder="e.g. SHOP-10892" value="${activeShopId || 'SHOP-10892'}" required autofocus style="text-transform: uppercase; font-family: monospace; font-weight: 700; letter-spacing: 1px;">
                   </div>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" style="font-weight: 700;">Staff User ID / Passcode <span class="required-asterisk">*</span></label>
+                  <label class="form-label" style="font-weight: 700;">Staff User ID / Username <span class="required-asterisk">*</span></label>
+                  <div class="input-with-icon">
+                    <span class="input-icon-prefix">👤</span>
+                    <input type="text" name="staffUserId" id="login-staff-user-id" class="form-input" placeholder="e.g. STF-101 or Username" required style="font-family: monospace; font-weight: 600;">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" style="font-weight: 700;">Staff Passcode / Password <span class="required-asterisk">*</span></label>
                   <div class="input-with-icon">
                     <span class="input-icon-prefix">🔑</span>
                     <input type="password" id="login-staff-passcode" name="passcode" class="form-input" placeholder="Enter Staff Passcode (e.g. 123456)" required>
@@ -839,11 +882,9 @@ window.iKhataUI = {
     if (!btn) return;
 
     if (isStaff) {
-      if (icon) icon.innerText = '👑';
-      if (label) label.innerText = 'Switch to Admin / Owner Dashboard';
-      btn.setAttribute('title', 'Return to Full Admin Dashboard (PIN Required)');
-      btn.classList.add('staff-mode-active');
+      btn.style.display = 'none';
     } else {
+      btn.style.display = 'inline-flex';
       if (icon) icon.innerText = '👤';
       if (label) label.innerText = 'Switch to Staff Mode';
       btn.setAttribute('title', 'Switch View to Staff Mode (Restricted Privacy View)');
@@ -1006,6 +1047,7 @@ window.iKhataUI = {
     const isStaff = window.iKhataStore.isStaffSession();
 
     this.updateRoleSwitchButton();
+    document.body.classList.toggle('staff-mode-active', isStaff);
 
     // Toggle public shop mode shielding class on body
     if (this.currentRoute === 'customer-store') {
@@ -1028,16 +1070,13 @@ window.iKhataUI = {
     // Filter sidebar navigation links based on active staff role & permissions
     document.querySelectorAll('.sidebar .nav-item').forEach(item => {
       const route = item.getAttribute('data-route');
-      if (!route) return;
-
       let isAllowed = true;
+
       if (isStaff) {
-        if (route === 'expenses') isAllowed = window.iKhataStore.checkPermission('VIEW_EXPENSES') || window.iKhataStore.checkPermission('ADD_EXPENSE');
-        else if (route === 'pnl') isAllowed = window.iKhataStore.checkPermission('VIEW_PNL') || window.iKhataStore.checkPermission('VIEW_PROFIT');
-        else if (route === 'analytics' || route === 'statement-generator' || route === 'simulator') isAllowed = window.iKhataStore.checkPermission('VIEW_REPORTS');
-        else if (route === 'employees') isAllowed = window.iKhataStore.checkPermission('MANAGE_EMPLOYEES');
-        else if (route === 'invoices') isAllowed = window.iKhataStore.checkPermission('CREATE_INVOICE') || window.iKhataStore.checkPermission('VIEW_REPORTS');
-        else if (route === 'suppliers') isAllowed = window.iKhataStore.checkPermission('CREATE_PURCHASE') || window.iKhataStore.checkPermission('VIEW_REPORTS');
+        const restrictedRoutes = ['gullak', 'po', 'collection-map', 'analytics', 'statement-generator', 'simulator', 'employees', 'expenses', 'pnl', 'suppliers'];
+        if (item.classList.contains('staff-hide') || (route && restrictedRoutes.includes(route))) {
+          isAllowed = false;
+        }
       }
 
       item.style.display = isAllowed ? 'flex' : 'none';
@@ -1049,18 +1088,8 @@ window.iKhataUI = {
 
     // If logged in as staff, check route permission
     if (isStaff) {
-      if (this.currentRoute === 'dashboard') {
-        container.innerHTML = this.renderStaffDashboard(state);
-        return;
-      }
-      let canAccessCurrent = true;
-      const r = this.currentRoute;
-      if (r === 'expenses') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_EXPENSES') || window.iKhataStore.checkPermission('ADD_EXPENSE');
-      else if (r === 'pnl') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_PNL') || window.iKhataStore.checkPermission('VIEW_PROFIT');
-      else if (r === 'analytics' || r === 'statement-generator' || r === 'simulator') canAccessCurrent = window.iKhataStore.checkPermission('VIEW_REPORTS');
-      else if (r === 'employees') canAccessCurrent = window.iKhataStore.checkPermission('MANAGE_EMPLOYEES');
-
-      if (!canAccessCurrent) {
+      const restrictedRoutes = ['gullak', 'po', 'collection-map', 'analytics', 'statement-generator', 'simulator', 'employees', 'expenses', 'pnl', 'suppliers'];
+      if (this.currentRoute === 'dashboard' || restrictedRoutes.includes(this.currentRoute)) {
         container.innerHTML = this.renderStaffDashboard(state);
         return;
       }
@@ -1145,9 +1174,6 @@ window.iKhataUI = {
           <div style="font-size: 0.85rem; opacity: 0.9;">Shop ID: <strong style="font-family: monospace; letter-spacing: 1px;">${shopId}</strong> • ${dateFormatted}</div>
         </div>
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <button class="btn btn-warning" onclick="window.iKhataUI.openOwnerAuthModal();" style="font-weight: 700;">
-            👑 Switch to Admin / Owner Dashboard
-          </button>
           <button class="btn btn-outline" style="color: #ffffff; border-color: rgba(255,255,255,0.4);" onclick="window.iKhataUI.logout();">
             🚪 End Shift / Logout
           </button>
