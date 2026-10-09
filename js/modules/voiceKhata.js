@@ -4,6 +4,14 @@ window.iKhataVoice = {
   isListening: false,
 
   startListening() {
+    if (window.iKhataStore && !window.iKhataStore.checkFeatureLimit('AI_VOICE')) {
+      if (window.iKhataUI) {
+        window.iKhataUI.showToast('👑 Upgrade to MAX PLAN (₹99/mo) or ULTRA PLAN (₹149/mo) to unlock AI Voice Assistant!', 'warning');
+        window.iKhataUI.openSubscriptionPlanModal('MAX');
+      }
+      return;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       this.simulateVoiceInput();
       return;

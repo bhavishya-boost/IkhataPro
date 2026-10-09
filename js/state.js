@@ -863,15 +863,44 @@
       const plan = bus ? (bus.subscriptionPlan || 'ULTRA') : 'ULTRA';
       
       const limits = {
-        FREE: { maxCustomers: 15, maxProducts: 25, allowGSTInvoices: false, allowAI: false, allowRBAC: false, allowAttendance: false, label: 'Free Plan (₹0/mo)', price: 0 },
-        MAX: { maxCustomers: 500, maxProducts: 1000, allowGSTInvoices: true, allowAI: true, allowRBAC: false, allowAttendance: false, label: 'Max Plan (₹99/mo)', price: 99 },
-        ULTRA: { maxCustomers: 999999, maxProducts: 999999, allowGSTInvoices: true, allowAI: true, allowRBAC: true, allowAttendance: true, label: 'Ultra Plan (₹199/mo - Featured)', price: 199 }
+        FREE: {
+          price: 0,
+          maxProducts: 15,
+          allowAI: false,
+          allowAnalytics: false,
+          allowRBAC: false,
+          allowAttendance: false,
+          allowUnlimitedInventory: false,
+          label: 'Free Plan (₹0/mo)'
+        },
+        MAX: {
+          price: 99,
+          maxProducts: 25,
+          allowAI: true,
+          allowAnalytics: true,
+          allowRBAC: false,
+          allowAttendance: false,
+          allowUnlimitedInventory: false,
+          label: 'Max Plan (₹99/mo)'
+        },
+        ULTRA: {
+          price: 149,
+          maxProducts: 999999,
+          allowAI: true,
+          allowAnalytics: true,
+          allowRBAC: true,
+          allowAttendance: true,
+          allowUnlimitedInventory: true,
+          label: 'Ultra Plan (₹149/mo - Featured)'
+        }
       };
 
+      const info = limits[plan] || limits.ULTRA;
       return {
         plan,
-        label: (limits[plan] || limits.ULTRA).label,
-        limits: limits[plan] || limits.ULTRA
+        label: info.label,
+        price: info.price,
+        limits: info
       };
     }
 
@@ -944,15 +973,13 @@
 
     checkFeatureLimit(featureName) {
       const sub = this.getSubscriptionInfo();
-      if (featureName === 'CUSTOMER_COUNT') {
-        return this.getCustomers().length < sub.limits.maxCustomers;
-      }
       if (featureName === 'PRODUCT_COUNT') {
         return this.getProducts().length < sub.limits.maxProducts;
       }
-      if (featureName === 'GST_INVOICE') return sub.limits.allowGSTInvoices;
-      if (featureName === 'AI_ASSISTANT') return sub.limits.allowAI;
-      if (featureName === 'RBAC_MANAGEMENT') return sub.limits.allowRBAC;
+      if (featureName === 'AI_VOICE' || featureName === 'AI_ASSISTANT') return sub.limits.allowAI;
+      if (featureName === 'ANALYTICS' || featureName === 'REPORTS_FORECAST') return sub.limits.allowAnalytics;
+      if (featureName === 'EMPLOYEES_RBAC' || featureName === 'RBAC_MANAGEMENT') return sub.limits.allowRBAC;
+      if (featureName === 'ATTENDANCE_CONTROL') return sub.limits.allowAttendance;
       return true;
     }
 

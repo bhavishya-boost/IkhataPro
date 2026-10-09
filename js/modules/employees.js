@@ -753,21 +753,21 @@ window.iKhataEmployees = {
         <div style="font-size: 3rem; margin-bottom: 8px;">👑</div>
         <h3 style="font-size: 1.3rem; margin-bottom: 8px; color: var(--primary);">Exclusive Ultra Plan Feature</h3>
         <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
-          The Daily Staff Attendance Access Control & Login Locking system is available exclusively on the <strong>ULTRA PLAN (₹199/month)</strong>.
+          The Daily Staff Attendance Access Control & Login Locking system is available exclusively on the <strong>ULTRA PLAN (₹149/month)</strong>.
         </p>
         <div style="background: rgba(79, 70, 229, 0.08); padding: 14px; border-radius: 10px; border: 1px solid rgba(79, 70, 229, 0.2); text-align: left; margin-bottom: 20px;">
-          <strong style="display: block; margin-bottom: 6px; color: var(--text-color);">Ultra Plan Perks (₹199/mo):</strong>
+          <strong style="display: block; margin-bottom: 6px; color: var(--text-color);">Ultra Plan Perks (₹149/mo):</strong>
           <ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: var(--text-muted);">
             <li>🔒 Daily Employee Attendance Access Control & Login Locking</li>
             <li>👥 Multi-Staff Accounts & Role Permissions</li>
-            <li>🧾 Advanced Thermal Printing POS & Barcode Scanner</li>
+            <li>📦 Unlimited Inventory & Items</li>
             <li>📊 Detailed Staff Sales & Collections Analytics</li>
           </ul>
         </div>
         <div style="display: flex; gap: 10px;">
           <button class="btn btn-outline" style="flex: 1;" onclick="window.iKhataUI.closeModal();">Cancel</button>
           <button class="btn btn-primary" style="flex: 1; background: #4f46e5; border-color: #4f46e5;" onclick="window.iKhataEmployees.selectPlan('ULTRA'); window.iKhataUI.closeModal();">
-            ⚡ Upgrade to Ultra (₹199/mo)
+            ⚡ Upgrade to Ultra (₹149/mo)
           </button>
         </div>
       </div>

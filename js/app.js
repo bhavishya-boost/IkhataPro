@@ -180,6 +180,31 @@ window.iKhataUI = {
   },
 
   navigate(route, extraParam = null) {
+    const isStaff = window.iKhataStore ? window.iKhataStore.isStaffSession() : false;
+    const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
+
+    // Gatekeeping for Admin Plan Restrictions
+    if (!isStaff) {
+      if (currentPlan === 'FREE') {
+        if (route === 'analytics') {
+          this.showToast('👑 Upgrade to MAX PLAN (₹99/mo) or ULTRA PLAN (₹149/mo) to unlock Reports & AI Forecast!', 'warning');
+          this.openSubscriptionPlanModal('MAX');
+          return;
+        }
+        if (route === 'employees') {
+          this.showToast('👑 Upgrade to ULTRA PLAN (₹149/mo) to unlock Employees & RBAC Access Control!', 'warning');
+          this.openSubscriptionPlanModal('ULTRA');
+          return;
+        }
+      } else if (currentPlan === 'MAX') {
+        if (route === 'employees') {
+          this.showToast('👑 Upgrade to ULTRA PLAN (₹149/mo) to unlock Employees & RBAC Access Control!', 'warning');
+          this.openSubscriptionPlanModal('ULTRA');
+          return;
+        }
+      }
+    }
+
     this.currentRoute = route;
     if (route === 'customer-profile') {
       this.currentCustomerProfileId = extraParam;
@@ -1098,6 +1123,38 @@ window.iKhataUI = {
       }
 
       item.style.display = isAllowed ? 'flex' : 'none';
+
+      // Attach / toggle King Emoji 👑 plan lock badge for Admin view
+      if (!isStaff && route) {
+        let badge = item.querySelector('.plan-king-lock-badge');
+        let isLockedForPlan = false;
+
+        if (currentPlan === 'FREE') {
+          if (['analytics', 'employees'].includes(route)) {
+            isLockedForPlan = true;
+          }
+        } else if (currentPlan === 'MAX') {
+          if (['employees'].includes(route)) {
+            isLockedForPlan = true;
+          }
+        }
+
+        if (isLockedForPlan) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'plan-king-lock-badge';
+            badge.innerHTML = ' 👑';
+            badge.style.marginLeft = 'auto';
+            badge.style.fontSize = '0.9rem';
+            badge.setAttribute('title', 'Plan Upgrade Required');
+            item.appendChild(badge);
+          } else {
+            badge.style.display = 'inline';
+          }
+        } else if (badge) {
+          badge.style.display = 'none';
+        }
+      }
     });
 
     // Render active route inside page-view-container
@@ -1761,6 +1818,19 @@ window.iKhataUI = {
   },
 
   openAddProductModal() {
+    if (window.iKhataStore && !window.iKhataStore.checkFeatureLimit('PRODUCT_COUNT')) {
+      const currentPlan = window.iKhataStore.getSubscriptionPlan();
+      const count = window.iKhataStore.getProducts().length;
+      if (currentPlan === 'FREE') {
+        this.showToast(`👑 FREE Plan limit reached (${count}/15 items max). Upgrade to MAX (25 items) or ULTRA (Unlimited)!`, 'warning');
+        this.openSubscriptionPlanModal('MAX');
+      } else if (currentPlan === 'MAX') {
+        this.showToast(`👑 MAX Plan limit reached (${count}/25 items max). Upgrade to ULTRA (Unlimited Inventory)!`, 'warning');
+        this.openSubscriptionPlanModal('ULTRA');
+      }
+      return;
+    }
+
     this.openModal('Add New Product', `
       <form onsubmit="event.preventDefault(); window.iKhataUI.submitAddProduct(this);">
         <div class="form-group">
@@ -2235,7 +2305,7 @@ window.iKhataUI = {
     `);
   },
 
-  openSubscriptionPlanModal() {
+  openSubscriptionPlanModal(recommendedPlan = null) {
     const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
     const isUltra = currentPlan === 'ULTRA';
 
@@ -2249,7 +2319,7 @@ window.iKhataUI = {
             </h3>
           </div>
           <div style="font-size: 0.85rem; color: var(--text-muted); text-align: right;">
-            ${isUltra ? '⚡ Attendance Access Control & All Features Unlocked' : '🔒 Upgrade to Ultra Plan (₹199/mo) to unlock Employee Attendance Locking'}
+            ${isUltra ? '⚡ Attendance Access Control & All Features Unlocked' : (currentPlan === 'MAX' ? '🔒 Upgrade to Ultra Plan (₹149/mo) for Employees & RBAC' : '🔒 Upgrade plan to unlock AI Voice, Reports & Employees')}
           </div>
         </div>
 
@@ -2261,7 +2331,12 @@ window.iKhataUI = {
                 <strong style="font-size: 1.05rem;">FREE PLAN</strong>
                 <span style="font-weight: 800; color: var(--text-main);">₹0 / mo</span>
               </div>
-              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Basic digital ledger & khata entry capabilities for small shopkeepers.</p>
+              <ul style="margin: 10px 0 0 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+                <li>🏠 Home & My Khata</li>
+                <li>🛒 POS Counter & Invoices</li>
+                <li>📦 Inventory (Limit: Max 15 items)</li>
+                <li>🏭 Suppliers, Expenses & PnL</li>
+              </ul>
             </div>
             <button class="btn btn-sm ${currentPlan === 'FREE' ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px;" ${currentPlan === 'FREE' ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('FREE'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('✅ Plan switched to Free Plan (₹0)', 'success'); window.iKhataUI.refresh();">
               ${currentPlan === 'FREE' ? '✓ Active Plan' : 'Switch to Free'}
@@ -2275,7 +2350,12 @@ window.iKhataUI = {
                 <strong style="font-size: 1.05rem; color: var(--primary);">MAX PLAN</strong>
                 <span style="font-weight: 800; color: var(--primary);">₹99 / mo</span>
               </div>
-              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Automated WhatsApp reminders, thermal POS printing & basic inventory.</p>
+              <ul style="margin: 10px 0 0 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+                <li>✅ <strong>All FREE Plan Features</strong></li>
+                <li>🎙️ <strong>AI Voice Assistant</strong></li>
+                <li>📦 Inventory (Limit: Max 25 items)</li>
+                <li>📊 <strong>Reports & AI Forecast</strong></li>
+              </ul>
             </div>
             <button class="btn btn-sm ${currentPlan === 'MAX' ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px;" ${currentPlan === 'MAX' ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('MAX'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('✅ Plan switched to Max Plan (₹99/mo)', 'success'); window.iKhataUI.refresh();">
               ${currentPlan === 'MAX' ? '✓ Active Plan' : 'Select Max (₹99)'}
@@ -2288,12 +2368,17 @@ window.iKhataUI = {
             <div>
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <strong style="font-size: 1.05rem; color: #4f46e5;">ULTRA PLAN</strong>
-                <span style="font-weight: 800; color: #4f46e5;">₹199 / mo</span>
+                <span style="font-weight: 800; color: #4f46e5;">₹149 / mo</span>
               </div>
-              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Multi-Staff Access, Advanced POS & <strong>Exclusive Employee Attendance Access Control System</strong>.</p>
+              <ul style="margin: 10px 0 0 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+                <li>⚡ <strong>All FREE + MAX Features</strong></li>
+                <li>👥 <strong>Employees & RBAC Management</strong></li>
+                <li>📦 <strong>Unlimited Inventory</strong></li>
+                <li>🔒 <strong>Attendance Access Control</strong></li>
+              </ul>
             </div>
-            <button class="btn btn-sm ${isUltra ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px; ${isUltra ? 'background: #4f46e5;' : ''}" ${isUltra ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('ULTRA'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('⚡ Upgrade successful! Active Plan: ULTRA PLAN (₹199/mo)', 'success'); window.iKhataUI.refresh();">
-              ${isUltra ? '⚡ Active Ultra Plan' : 'Upgrade to Ultra (₹199)'}
+            <button class="btn btn-sm ${isUltra ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px; ${isUltra ? 'background: #4f46e5;' : ''}" ${isUltra ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('ULTRA'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('⚡ Upgrade successful! Active Plan: ULTRA PLAN (₹149/mo)', 'success'); window.iKhataUI.refresh();">
+              ${isUltra ? '⚡ Active Ultra Plan' : 'Upgrade to Ultra (₹149)'}
             </button>
           </div>
         </div>
