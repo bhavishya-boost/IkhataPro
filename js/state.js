@@ -1471,8 +1471,6 @@
       const supplier = this.getSuppliers().find(s => s.id === supplierId);
       if (!supplier) return false;
 
-      supplier.balance = Math.max(0, (supplier.balance || 0) - numAmt);
-      supplier.totalPayments = (supplier.totalPayments || 0) + numAmt;
       supplier.lastTransaction = new Date().toISOString().split('T')[0];
 
       if (!this.state.supplierTransactions) this.state.supplierTransactions = [];
@@ -1522,7 +1520,6 @@
       const taxAmt = Math.round((subtotal * taxRate) / 100);
       const grandTotal = subtotal + taxAmt;
       const paid = Math.min(grandTotal, parseFloat(paidAmount) || 0);
-      const unpaid = grandTotal - paid;
 
       const purchaseNo = 'PO-' + Math.floor(1000 + Math.random() * 9000);
       const today = date || new Date().toISOString().split('T')[0];
@@ -1546,10 +1543,6 @@
       };
 
       this.state.purchases.unshift(purchase);
-
-      supplier.balance = (supplier.balance || 0) + unpaid;
-      supplier.totalPurchases = (supplier.totalPurchases || 0) + grandTotal;
-      supplier.totalPayments = (supplier.totalPayments || 0) + paid;
       supplier.lastTransaction = today;
 
       if (!this.state.supplierTransactions) this.state.supplierTransactions = [];
@@ -1566,10 +1559,67 @@
         note: this.escapeHTML(note || `Stock Purchase PO #${purchaseNo}`)
       });
 
+      if (paid > 0) {
+        this.state.supplierTransactions.unshift({
+          id: 'st_' + Date.now() + '_pay',
+          business_id: bId,
+          supplierId: supplier.id,
+          supplierName: supplier.name,
+          type: 'PAYMENT',
+          amount: paid,
+          date: today,
+          refNo: `PAY-${purchaseNo}`,
+          note: this.escapeHTML(`Upfront payment for PO #${purchaseNo}`)
+        });
+      }
+
       this.logAudit('PURCHASE_CREATED', 'Purchase', purchaseNo, `Purchased ₹${grandTotal} from ${supplier.name}`);
       this.recalculateTotals();
       this.saveState();
       return purchase;
+    }
+
+    createPurchaseReturn({ supplierId, items, note }) {
+      const bId = this.getActiveBusinessId();
+      const supplier = this.getSuppliers().find(s => s.id === supplierId);
+      if (!supplier || !items || !items.length) return false;
+
+      let returnTotal = 0;
+      const parsedItems = items.map(item => {
+        const qty = Math.max(1, parseInt(item.qty) || 1);
+        const cost = Math.max(0, parseFloat(item.cost) || 0);
+        const itemTotal = qty * cost;
+        returnTotal += itemTotal;
+
+        if (item.productId) {
+          const prod = this.state.products.find(p => p.id === item.productId && p.business_id === bId);
+          if (prod) {
+            prod.stock = Math.max(0, (prod.stock || 0) - qty);
+          }
+        }
+        return { productId: item.productId || null, qty, cost, total: itemTotal };
+      });
+
+      const returnNo = 'PRET-' + Math.floor(1000 + Math.random() * 9000);
+      const today = new Date().toISOString().split('T')[0];
+
+      if (!this.state.supplierTransactions) this.state.supplierTransactions = [];
+      this.state.supplierTransactions.unshift({
+        id: 'st_' + Date.now(),
+        business_id: bId,
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        type: 'RETURN',
+        amount: returnTotal,
+        date: today,
+        refNo: returnNo,
+        note: this.escapeHTML(note || `Purchase Return #${returnNo}`)
+      });
+
+      this.logAudit('PURCHASE_RETURN', 'Supplier', supplier.id, `Returned goods worth ₹${returnTotal} to ${supplier.name}`);
+      this.recalculateTotals();
+      this.saveState();
+      return true;
     }
 
     createGSTInvoice(data) {
@@ -1801,6 +1851,25 @@
       this.getCustomers().forEach(c => {
         if (c.balance > 0) getSum += c.balance;
         else if (c.balance < 0) giveSum += Math.abs(c.balance);
+      });
+
+      // Recalculate each supplier's totals & balance dynamically from purchases and payments
+      this.getSuppliers(true).forEach(s => {
+        if (s.isDeleted) return;
+        const supPurchases = (this.state.purchases || []).filter(p => p.supplierId === s.id && !p.isDeleted);
+        const supTx = (this.state.supplierTransactions || []).filter(t => t.supplierId === s.id && !t.isDeleted);
+
+        const purchasesSum = supPurchases.reduce((sum, p) => sum + (p.isReturn ? -(p.grandTotal || 0) : (p.grandTotal || 0)), 0);
+        const initialBal = parseFloat(s.initialBalance) || 0;
+        s.totalPurchases = Math.round((purchasesSum + initialBal) * 100) / 100;
+
+        const paymentsSum = supTx.filter(t => t.type === 'PAYMENT').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+        const returnsSum = supTx.filter(t => t.type === 'RETURN').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+        s.totalPayments = Math.round(paymentsSum * 100) / 100;
+
+        // Due = Total Purchases - Total Payments - Returns
+        const netDue = (s.totalPurchases - s.totalPayments - returnsSum);
+        s.balance = Math.max(0, Math.round(netDue * 100) / 100);
       });
 
       let totalSupplierPayable = 0;

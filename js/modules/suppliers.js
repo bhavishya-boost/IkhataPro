@@ -36,7 +36,7 @@ window.iKhataSuppliers = {
     }
 
     const totalPayable = suppliers.reduce((sum, s) => sum + (s.balance || 0), 0);
-    const totalPurchasesAmt = purchases.reduce((sum, p) => sum + (p.grandTotal || 0), 0);
+    const totalPurchasesAmt = purchases.reduce((sum, p) => sum + (p.grandTotal || 0), 0) + suppliers.reduce((sum, s) => sum + (parseFloat(s.initialBalance) || 0), 0);
     const totalPaymentsAmt = supplierTransactions.filter(t => t.type === 'PAYMENT').reduce((sum, t) => sum + (t.amount || 0), 0);
 
     return `
