@@ -65,33 +65,8 @@ window.iKhataDemo = {
       { id: 'cs5', business_id: 'BUS_SHARMA', name: 'Deepa Home Appliances', phone: '+91 95555 66666', balance: 15000, type: 'GET', lastActive: d(55), score: 50, category: 'Overdue', city: 'Noida' }
     ];
 
-    // 3. Products — 15 for LJS, 8 for Sharma
-    const products = [
-      // BUS_LJS Products
-      { id: 'p1', business_id: 'BUS_LJS', name: 'Gold Coin 24K 5g', price: 38500, cost: 35000, stock: 12, minStock: 3, category: 'Jewellery', sku: 'SKU-GLD-01', barcode: '8901234567890', isOnlineVisible: true, description: 'Certified 999 Purity Hallmark Gold Coin', imageUrl: 'https://images.unsplash.com/photo-1610375461246-83df859d849d?w=400&q=80' },
-      { id: 'p2', business_id: 'BUS_LJS', name: 'Silver Payal 100g', price: 8500, cost: 7200, stock: 4, minStock: 8, category: 'Jewellery', sku: 'SKU-SLV-02', barcode: '8901234567891', isOnlineVisible: true, description: 'Traditional Pure Silver Anklet set', imageUrl: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&q=80' },
-      { id: 'p3', business_id: 'BUS_LJS', name: 'Basmati Rice Premium 5kg', price: 450, cost: 380, stock: 24, minStock: 10, category: 'Grocery', sku: 'SKU-RIC-01', barcode: '8901234567892', isOnlineVisible: true, description: 'Long Grain Aged Royal Basmati Rice', imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80' },
-      { id: 'p4', business_id: 'BUS_LJS', name: 'Gold Ring 22K 3g', price: 24000, cost: 21500, stock: 8, minStock: 2, category: 'Jewellery', sku: 'SKU-GLD-02', barcode: '8901234567893', isOnlineVisible: true, description: 'Hallmark BIS 916 Gold Ring', imageUrl: 'https://images.unsplash.com/photo-1603561596112-0a132b757442?w=400&q=80' },
-      { id: 'p5', business_id: 'BUS_LJS', name: 'Toor Dal 1kg', price: 145, cost: 120, stock: 60, minStock: 20, category: 'Grocery', sku: 'SKU-DAL-01', barcode: '8901234567894', isOnlineVisible: true, description: 'Premium Masoor / Toor Dal Grade A', imageUrl: '' },
-      { id: 'p6', business_id: 'BUS_LJS', name: 'Mustard Oil 1L', price: 185, cost: 155, stock: 30, minStock: 15, category: 'Grocery', sku: 'SKU-OIL-01', barcode: '8901234567895', isOnlineVisible: true, description: 'Kachi Ghani Pure Mustard Oil', imageUrl: '' },
-      { id: 'p7', business_id: 'BUS_LJS', name: 'Silver Chain 50g', price: 4200, cost: 3500, stock: 0, minStock: 5, category: 'Jewellery', sku: 'SKU-SLV-03', barcode: '8901234567896', isOnlineVisible: false, description: 'Sterling Silver 925 Chain', imageUrl: '' },
-      { id: 'p8', business_id: 'BUS_LJS', name: 'Wheat Flour Atta 10kg', price: 380, cost: 320, stock: 18, minStock: 10, category: 'Grocery', sku: 'SKU-ATT-01', barcode: '8901234567897', isOnlineVisible: true, description: 'Chakki Fresh Atta 100% Whole Wheat', imageUrl: '' },
-      { id: 'p9', business_id: 'BUS_LJS', name: 'Diamond Pendant Set', price: 85000, cost: 75000, stock: 3, minStock: 1, category: 'Jewellery', sku: 'SKU-DIA-01', barcode: '8901234567898', isOnlineVisible: true, description: 'Solitaire Diamond Pendant with 18K chain', imageUrl: '' },
-      { id: 'p10', business_id: 'BUS_LJS', name: 'Ghee Pure Cow 500g', price: 320, cost: 265, stock: 25, minStock: 12, category: 'Grocery', sku: 'SKU-GHE-01', barcode: '8901234567899', isOnlineVisible: true, description: 'A2 Cow Ghee Pure Vedic Process', imageUrl: '' },
-      { id: 'p11', business_id: 'BUS_LJS', name: 'Gold Bangle Set 18K', price: 52000, cost: 46000, stock: 5, minStock: 2, category: 'Jewellery', sku: 'SKU-BAN-01', barcode: '8901234567900', isOnlineVisible: true, description: 'Machine Cut 18K Gold Bangle Pair', imageUrl: '' },
-      { id: 'p12', business_id: 'BUS_LJS', name: 'Sugar 5kg', price: 210, cost: 175, stock: 45, minStock: 20, category: 'Grocery', sku: 'SKU-SUG-01', barcode: '8901234567901', isOnlineVisible: true, description: 'Double Refined White Sugar', imageUrl: '' },
-      { id: 'p13', business_id: 'BUS_LJS', name: 'Silver Glass Set (6pc)', price: 2800, cost: 2200, stock: 2, minStock: 4, category: 'Silverware', sku: 'SKU-SLV-04', barcode: '8901234567902', isOnlineVisible: true, description: 'Pure 999 Silver Drinking Glass Set', imageUrl: '' },
-      { id: 'p14', business_id: 'BUS_LJS', name: 'Nariyal Pani (Coconut Water)', price: 35, cost: 22, stock: 80, minStock: 30, category: 'Beverages', sku: 'SKU-COC-01', barcode: '8901234567903', isOnlineVisible: true, description: 'Fresh packaged tender coconut water', imageUrl: '' },
-      { id: 'p15', business_id: 'BUS_LJS', name: 'Pulses Mix Pack (Assorted)', price: 680, cost: 550, stock: 0, minStock: 8, category: 'Grocery', sku: 'SKU-PUL-01', barcode: '8901234567904', isOnlineVisible: false, description: 'Assorted Dal Gift Pack 4-in-1', imageUrl: '' },
-
-      // BUS_SHARMA Products
-      { id: 'ps1', business_id: 'BUS_SHARMA', name: 'LG Smart LED TV 43 Inch', price: 28990, cost: 24000, stock: 8, minStock: 2, category: 'Televisions', sku: 'SKU-TV-43', barcode: '8909876543210', isOnlineVisible: true, description: '4K Ultra HD Smart WebOS TV with Dolby Audio', imageUrl: 'https://images.unsplash.com/photo-1593784991095-a205069470b6?w=400&q=80' },
-      { id: 'ps2', business_id: 'BUS_SHARMA', name: 'Microtek Inverter 1050VA', price: 6800, cost: 5500, stock: 15, minStock: 4, category: 'Power', sku: 'SKU-INV-01', barcode: '8909876543211', isOnlineVisible: true, description: 'Digital Heavy Duty Sine Wave Inverter', imageUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&q=80' },
-      { id: 'ps3', business_id: 'BUS_SHARMA', name: 'LG Refrigerator 260L', price: 24500, cost: 20800, stock: 4, minStock: 2, category: 'Refrigerators', sku: 'SKU-REF-01', barcode: '8909876543212', isOnlineVisible: true, description: 'Frost Free Double Door Smart Inverter Compressor', imageUrl: '' },
-      { id: 'ps4', business_id: 'BUS_SHARMA', name: 'Ceiling Fan Havells 1200mm', price: 2800, cost: 2200, stock: 22, minStock: 5, category: 'Fans', sku: 'SKU-FAN-01', barcode: '8909876543213', isOnlineVisible: true, description: 'BLDC Motor Energy Saving Premium Ceiling Fan', imageUrl: '' },
-      { id: 'ps5', business_id: 'BUS_SHARMA', name: 'Tubelight LED 20W', price: 280, cost: 210, stock: 1, minStock: 10, category: 'Lighting', sku: 'SKU-LED-01', barcode: '8909876543214', isOnlineVisible: true, description: 'Philips Batten LED Light 6500K', imageUrl: '' },
-      { id: 'ps6', business_id: 'BUS_SHARMA', name: 'Washing Machine LG 7kg', price: 18500, cost: 15800, stock: 3, minStock: 1, category: 'Appliances', sku: 'SKU-WM-01', barcode: '8909876543215', isOnlineVisible: true, description: 'Top Load Fully Automatic with TurboDrum', imageUrl: '' }
-    ];
+    // 3. Products — Clean real-time inventory (Starts empty, populated exclusively by Admin and Staff)
+    const products = [];
 
     // 4. Transactions — 40+ entries spread over 90 days for LJS
     const transactions = [

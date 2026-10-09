@@ -257,6 +257,17 @@ window.iKhataEmployees = {
     `);
   },
 
+  handleAttendanceToggle(empId, isPresent) {
+    if (window.iKhataStore && typeof window.iKhataStore.toggleStaffAttendance === 'function') {
+      window.iKhataStore.toggleStaffAttendance(empId, isPresent);
+      const msg = isPresent ? '🟢 Staff marked PRESENT! Login enabled for today.' : '🔴 Staff marked ABSENT! Login locked.';
+      window.iKhataUI.showToast(msg, isPresent ? 'success' : 'warning');
+      if (window.iKhataUI && typeof window.iKhataUI.refresh === 'function') {
+        window.iKhataUI.refresh();
+      }
+    }
+  },
+
   confirmDeleteEmployee(empId) {
     if (confirm('Kya aap is staff member ko delete karna chahte hain?')) {
       if (window.iKhataStore && typeof window.iKhataStore.deleteEmployee === 'function') {
@@ -725,24 +736,6 @@ window.iKhataEmployees = {
         window.iKhataUI.showToast(`✅ Business Subscription updated to ${planName} Plan!`, 'success');
         window.iKhataUI.refresh();
       }
-    }
-  },
-
-  handleAttendanceToggle(empId, isPresent) {
-    if (!window.iKhataStore) return;
-    
-    // Check gatekeeping: Ultra Plan required for daily attendance locking
-    if (!window.iKhataStore.isUltraPlanActive()) {
-      this.showUltraUpgradeModal();
-      return;
-    }
-
-    const newStatus = window.iKhataStore.toggleStaffAttendance(empId, isPresent);
-    const msg = isPresent ? '🟢 Staff marked PRESENT (Credentials Unlocked for Login)!' : '🔴 Staff marked ABSENT (Credentials Locked for Today)!';
-    
-    if (window.iKhataUI) {
-      window.iKhataUI.showToast(msg, isPresent ? 'success' : 'info');
-      window.iKhataUI.refresh();
     }
   },
 

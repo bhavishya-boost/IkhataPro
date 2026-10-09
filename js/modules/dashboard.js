@@ -3,10 +3,32 @@
 window.iKhataDashboard = {
   render(state) {
     const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
+    if (window.iKhataStore && window.iKhataStore.recalculateTotals) {
+      window.iKhataStore.recalculateTotals();
+    }
     const bus = window.iKhataStore.getCurrentBusiness();
     const transactions = window.iKhataStore.getTransactions();
     const suppliers = window.iKhataStore.getSuppliers();
     const bills = window.iKhataStore.getBills();
+    const invoices = window.iKhataStore.getInvoices ? window.iKhataStore.getInvoices() : [];
+
+    // Date helper for today's transactions
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayLocal = new Date().toLocaleDateString('en-CA');
+    const isToday = (dStr) => dStr === todayStr || dStr === todayLocal || (typeof dStr === 'string' && (dStr.startsWith(todayStr) || dStr.startsWith(todayLocal)));
+
+    const todayBills = bills.filter(b => isToday(b.date));
+    const todayInvs = invoices.filter(i => isToday(i.date));
+    const todayTx = transactions.filter(t => isToday(t.date) && !t.isDeleted);
+
+    const billsSales = todayBills.reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+    const invsSales = todayInvs.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+    const manualGaveSales = todayTx.filter(t => t.type === 'GAVE' && (!t.note || !t.note.includes('POS Bill'))).reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+    const liveTodaySales = Math.round((billsSales + invsSales + manualGaveSales) * 100) / 100;
+
+    const billsCashUpi = todayBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+    const txCollected = todayTx.filter(t => t.type === 'GOT').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+    const liveTodayReceived = Math.round((billsCashUpi + txCollected) * 100) / 100;
 
     // Intelligence computed dynamically
     const health = window.iKhataIntelligence ? window.iKhataIntelligence.computeBusinessHealth() : { score: bus.healthScore || 80, label: 'Healthy', color: '#059669', positives: [], risks: [], improvements: [] };
@@ -71,14 +93,14 @@ window.iKhataDashboard = {
       <div class="stats-grid">
         <div class="stat-card primary">
           <div class="stat-label">TODAY'S SALES</div>
-          <div class="stat-value">${formatCurrency(bus.todaySales)}</div>
-          <div class="stat-subtext up"><span>↑ Live</span> POS & Invoices</div>
+          <div class="stat-value">${formatCurrency(liveTodaySales)}</div>
+          <div class="stat-subtext up"><span>↑ Live</span> ${todayBills.length} POS bills • ${todayTx.filter(t => t.type === 'GAVE').length} Udhar</div>
         </div>
 
         <div class="stat-card success">
           <div class="stat-label">RECEIVED TODAY</div>
-          <div class="stat-value" style="color: var(--success);">${formatCurrency(bus.todayReceived)}</div>
-          <div class="stat-subtext">Collections settled</div>
+          <div class="stat-value" style="color: var(--success);">${formatCurrency(liveTodayReceived)}</div>
+          <div class="stat-subtext">${todayBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).length} Cash/UPI • ${todayTx.filter(t => t.type === 'GOT').length} Jama</div>
         </div>
 
         <div class="stat-card danger">

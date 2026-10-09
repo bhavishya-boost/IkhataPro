@@ -344,29 +344,51 @@ app.post('/api/auth/verify-otp', (req, res) => {
 app.post('/api/staff/:id/attendance', (req, res) => {
   try {
     const { id } = req.params;
-    const { shopId, isPresent, attendanceStatus, date } = req.body;
+    const { shopId, isPresent, is_present, status, attendanceStatus, date } = req.body;
     const cleanShopId = (shopId || '').trim().toUpperCase();
     const todayStr = date || new Date().toISOString().split('T')[0];
+    const isActuallyPresent = isPresent !== undefined ? Boolean(isPresent) : (is_present !== undefined ? Boolean(is_present) : (status === 'PRESENT' || attendanceStatus === 'PRESENT'));
 
     let found = null;
+    const cleanId = (id || '').trim().toUpperCase();
     for (const sId in staffStore) {
       if (!cleanShopId || sId.toUpperCase() === cleanShopId) {
-        const staff = staffStore[sId].find(s => s.id === id || s.username === id);
+        let staff = staffStore[sId].find(s =>
+          (s.id && s.id.toUpperCase() === cleanId) ||
+          (s.username && s.username.toUpperCase() === cleanId) ||
+          (s.name && s.name.toUpperCase() === cleanId) ||
+          (s.phone && s.phone === cleanId)
+        );
         if (staff) {
           staff.attendanceDate = todayStr;
-          staff.isPresent = Boolean(isPresent);
-          staff.attendanceStatus = isPresent ? 'PRESENT' : 'ABSENT';
+          staff.isPresent = isActuallyPresent;
+          staff.attendanceStatus = isActuallyPresent ? 'PRESENT' : 'ABSENT';
           found = staff;
           break;
         }
       }
     }
 
-    if (found) {
-      console.log(`[Attendance API] Updated ${found.name} (${found.id}) -> ${found.attendanceStatus} on ${todayStr}`);
-      return res.status(200).json({ success: true, message: 'Attendance status updated', staff: found });
+    if (!found) {
+      // Initialize in staffStore if not exists
+      const newStaff = {
+        id: id,
+        shopId: cleanShopId || 'SHOP-25645',
+        name: id,
+        username: id,
+        passcode: '123456',
+        attendanceDate: todayStr,
+        isPresent: isActuallyPresent,
+        attendanceStatus: isActuallyPresent ? 'PRESENT' : 'ABSENT',
+        createdAt: new Date().toISOString()
+      };
+      if (!staffStore[newStaff.shopId]) staffStore[newStaff.shopId] = [];
+      staffStore[newStaff.shopId].push(newStaff);
+      found = newStaff;
     }
-    return res.status(404).json({ success: false, error: 'Staff member not found' });
+
+    console.log(`[Attendance API] Updated ${found.name} (${found.id}) -> ${found.attendanceStatus} on ${todayStr}`);
+    return res.status(200).json({ success: true, message: 'Attendance status updated', staff: found });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -385,37 +407,71 @@ app.post('/api/auth/staff-login', (req, res) => {
     const cleanUser = (staffUserId || '').trim().toUpperCase();
     const cleanPass = (passcode || '').trim();
 
-    const shopStaffList = staffStore[cleanShopId] || [];
+    if (!staffStore[cleanShopId]) {
+      staffStore[cleanShopId] = [];
+    }
+
+    let shopStaffList = staffStore[cleanShopId] || [];
 
     // a) CREDENTIAL CHECK
-    const staffMember = shopStaffList.find(s => {
+    let staffMember = shopStaffList.find(s => {
       const matchShop = s.shopId && s.shopId.toUpperCase() === cleanShopId;
       const matchPass = (s.passcode && s.passcode === cleanPass) || (cleanPass === '123456');
       const matchUser = !cleanUser ||
         (s.username && s.username.toUpperCase() === cleanUser) ||
         (s.id && s.id.toUpperCase() === cleanUser) ||
-        (s.phone && s.phone === cleanUser);
+        (s.phone && s.phone === cleanUser) ||
+        (s.name && s.name.toUpperCase() === cleanUser);
       return matchShop && matchPass && matchUser;
     });
 
+    // If not found in this shop, check all staff in store
     if (!staffMember) {
-      return res.status(401).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
+      for (const sId in staffStore) {
+        const found = staffStore[sId].find(s => {
+          const matchPass = (s.passcode && s.passcode === cleanPass) || (cleanPass === '123456');
+          const matchUser = !cleanUser ||
+            (s.username && s.username.toUpperCase() === cleanUser) ||
+            (s.id && s.id.toUpperCase() === cleanUser) ||
+            (s.phone && s.phone === cleanUser);
+          return matchPass && matchUser;
+        });
+        if (found) {
+          staffMember = { ...found, shopId: cleanShopId };
+          break;
+        }
+      }
     }
 
-    // b) SUBSCRIPTION CHECK & c) ADMIN ATTENDANCE CHECK
-    const currentPlan = (subscriptionPlan || 'ULTRA').toUpperCase();
-    const todayStr = new Date().toISOString().split('T')[0];
+    // If still not in in-memory server store, dynamically register as ABSENT
+    if (!staffMember) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      staffMember = {
+        id: cleanUser || 'STAFF-101',
+        shopId: cleanShopId,
+        name: cleanUser || 'Staff Member',
+        phone: '9876543210',
+        role: 'Billing Staff',
+        username: cleanUser || 'STAFF-101',
+        passcode: cleanPass || '123456',
+        isPresent: false,
+        attendanceDate: todayStr,
+        attendanceStatus: 'ABSENT',
+        createdAt: new Date().toISOString()
+      };
+      staffStore[cleanShopId].push(staffMember);
+    }
 
-    if (currentPlan === 'ULTRA') {
-      const isPresentToday = staffMember.attendanceDate === todayStr && (staffMember.isPresent === true || staffMember.attendanceStatus === 'PRESENT');
-      
-      if (!isPresentToday) {
-        console.warn(`[Staff Login Blocked] ${staffMember.name} is ABSENT / locked on ${todayStr}`);
-        return res.status(403).json({
-          success: false,
-          error: 'Access Denied: Your account is currently locked. You can only log in after the Admin/Owner marks your attendance as PRESENT for today.'
-        });
-      }
+    // b) ADMIN ATTENDANCE CHECK (Staff CANNOT login unless marked PRESENT for today)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isPresentToday = staffMember.attendanceDate === todayStr && (staffMember.isPresent === true || staffMember.attendanceStatus === 'PRESENT');
+
+    if (!isPresentToday) {
+      console.warn(`[Staff Login Blocked] ${staffMember.name} is not present today on ${todayStr}`);
+      return res.status(403).json({
+        success: false,
+        error: 'You are not present! Admin ne aapki attendance nahi lagayi hai. Pehle Admin se attendance lagwayein.'
+      });
     }
 
     console.log(`[Staff Login] Successful authentication for ${staffMember.name} (${staffMember.id}) at Shop ${cleanShopId}`);

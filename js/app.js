@@ -313,32 +313,43 @@ window.iKhataUI = {
       });
       const data = await response.json();
       if (data && data.success) {
-        result = { success: true, staff: data.staff };
-        // Sync session to local store
+        const cleanShop = shopId.toUpperCase();
         const biz = (window.iKhataStore.state.businesses || []).find(b =>
-          (b.shopId && b.shopId.toUpperCase() === shopId.toUpperCase()) || b.id === 'BUS_LJS'
+          (b.shopId && b.shopId.toUpperCase() === cleanShop) || b.id === 'BUS_LJS'
         ) || window.iKhataStore.state.businesses[0];
         
+        if (biz) {
+          biz.shopId = cleanShop;
+        }
+
+        const staffData = {
+          ...data.staff,
+          shopId: cleanShop
+        };
+
+        result = { success: true, staff: staffData, business: biz };
+
         window.iKhataStore.state.currentSession = {
           isAuthenticated: true,
           role: 'STAFF',
-          user: data.staff,
+          shopId: cleanShop,
+          user: staffData,
           businessId: biz ? biz.id : 'BUS_LJS',
           workspaceSlug: biz ? biz.slug : 'ljs-jewellers',
           loginTime: new Date().toISOString()
         };
         window.iKhataStore.saveState();
-        result.business = biz;
-      } else if (data && data.error) {
-        result = { success: false, error: data.error };
+      } else {
+        // Explicit failure from server (e.g. 403 You are not present or invalid credentials)
+        result = {
+          success: false,
+          error: (data && data.error) ? data.error : 'You are not present! Admin ne aapki attendance nahi lagayi hai. Pehle Admin se attendance lagwayein.'
+        };
       }
     } catch (err) {
-      console.warn('[submitStaffLogin] API check notice:', err.message);
-    }
-
-    if (!result) {
-      // Fallback local store check
-      result = window.iKhataStore.loginStaff(shopId, passcode || staffUserId);
+      console.warn('[submitStaffLogin] API network failure, evaluating local store:', err.message);
+      // Fallback local store check with strict attendance verification
+      result = window.iKhataStore.loginStaff(shopId, staffUserId, passcode);
     }
 
     if (result && result.success) {
@@ -1229,7 +1240,7 @@ window.iKhataUI = {
     const dateFormatted = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const currentSession = state.currentSession || {};
     const staffUser = currentSession.user || { name: 'Staff Member', role: 'Billing Staff' };
-    const shopId = window.iKhataStore.getShopId();
+    const shopId = (staffUser && staffUser.shopId) || (currentSession && currentSession.shopId) || window.iKhataStore.getShopId();
 
     // Fetch Today's POS Bills
     const allBills = (window.iKhataStore.getBills ? window.iKhataStore.getBills() : []) || [];
