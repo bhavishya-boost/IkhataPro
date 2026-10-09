@@ -276,13 +276,15 @@ window.iKhataUI = {
       return;
     }
 
-    // Direct staff authentication via API with fallback to local store — NO ATTENDANCE LOCKS
+    // Staff authentication via API with fallback to local store — Ultra Plan Attendance Check Enforced
     let result = null;
+    const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
+
     try {
       const response = await fetch('/api/auth/staff-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopId, staffUserId, passcode })
+        body: JSON.stringify({ shopId, staffUserId, passcode, subscriptionPlan: currentPlan })
       });
       const data = await response.json();
       if (data && data.success) {
@@ -302,12 +304,14 @@ window.iKhataUI = {
         };
         window.iKhataStore.saveState();
         result.business = biz;
+      } else if (data && data.error) {
+        result = { success: false, error: data.error };
       }
     } catch (err) {
       console.warn('[submitStaffLogin] API check notice:', err.message);
     }
 
-    if (!result || !result.success) {
+    if (!result) {
       // Fallback local store check
       result = window.iKhataStore.loginStaff(shopId, passcode || staffUserId);
     }
@@ -316,10 +320,10 @@ window.iKhataUI = {
       this.showToast(`🟢 Staff Check-in Successful! Logged in as ${result.staff.name}`, 'success');
       this.navigateToWorkspace(result.business ? result.business.slug : 'ljs-jewellers');
     } else {
-      const errMsg = 'Invalid Shop ID, Staff ID, or Passcode.';
+      const errMsg = (result && result.error) || 'Invalid Shop ID, Staff ID, or Passcode.';
       if (errBox) {
         errBox.style.display = 'block';
-        errBox.innerText = `⚠️ ${errMsg}`;
+        errBox.innerHTML = `⚠️ ${errMsg}`;
       }
       this.showToast(errMsg, 'danger');
     }
@@ -351,35 +355,33 @@ window.iKhataUI = {
     const store = window.iKhataStore;
     const cleanEmail = email.trim().toLowerCase();
     
-    // Find account matching email or username
+    // Find account matching email, username, or mobile
     let account = (store.state.businesses || []).find(b =>
       (b.email && b.email.trim().toLowerCase() === cleanEmail) ||
-      (b.username && b.username.trim().toLowerCase() === cleanEmail)
+      (b.username && b.username.trim().toLowerCase() === cleanEmail) ||
+      (b.mobile && b.mobile.trim() === cleanEmail)
     );
 
-    // If no existing business matches the entered email, dynamically map or create one for the user
+    // Support pre-seeded demo store aliases
     if (!account) {
-      if (cleanEmail.includes('aryan') || cleanEmail.includes('ljs') || cleanEmail.includes('soni')) {
-        account = store.state.businesses.find(b => b.slug === 'ljs-jewellers') || store.state.businesses[0];
-      } else if (cleanEmail.includes('rahul') || cleanEmail.includes('sharma')) {
-        account = store.state.businesses.find(b => b.slug === 'sharma-electronics') || store.state.businesses[0];
-      } else if (store.state.businesses && store.state.businesses.length > 0) {
-        account = store.state.businesses[0];
-      } else {
-        account = {
-          id: 'BUS_' + Date.now(),
-          name: 'My Shop Workspace',
-          ownerName: cleanEmail.split('@')[0],
-          email: cleanEmail,
-          slug: 'my-shop-' + Date.now(),
-          shopId: 'SHOP-90812'
-        };
-        store.state.businesses.push(account);
+      if (['aryan', 'aryan@ljsjewellers.com', 'aryan@example.com', 'admin@ljs.com', 'ljs@example.com'].includes(cleanEmail)) {
+        account = (store.state.businesses || []).find(b => b.slug === 'ljs-jewellers');
+      } else if (['rahul', 'rahul@sharmaelectronics.com', 'rahul@example.com', 'sharma@example.com'].includes(cleanEmail)) {
+        account = (store.state.businesses || []).find(b => b.slug === 'sharma-electronics');
       }
-      account.email = cleanEmail;
-    } else {
-      account.email = cleanEmail;
     }
+
+    // Unregistered email check: Recommend Signup / Create Shop and block login
+    if (!account) {
+      if (errBox) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `⚠️ Account not registered for <strong>"${email}"</strong>.<br>Please check your email or <a href="#onboarding" onclick="window.location.hash='#onboarding'; window.iKhataUI.currentView='onboarding'; window.iKhataUI.refresh();" style="color: #4f46e5; text-decoration: underline; font-weight: 700;">Create a New Shop Account →</a>`;
+      }
+      this.showToast('❌ Account not registered! Please create a new shop account.', 'warning');
+      return;
+    }
+
+    account.email = cleanEmail;
 
     // Step 2: Admin credentials match! Trigger 6-digit Email OTP via Nodemailer
     this.pendingLogin = {
@@ -1066,6 +1068,22 @@ window.iKhataUI = {
     if (brandName) brandName.innerText = currentBus.name;
     if (brandBranch) brandBranch.innerText = isStaff ? `Shop ID: ${window.iKhataStore.getShopId()}` : `${currentBus.city} Branch ▼`;
     if (brandAvatar) brandAvatar.innerText = currentBus.logo || currentBus.name.charAt(0);
+
+    // Update topbar subscription plan badge
+    const planBtnLabel = document.getElementById('topbar-plan-label');
+    const planBtn = document.getElementById('topbar-plan-btn');
+    const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
+
+    if (planBtnLabel) planBtnLabel.innerText = `${currentPlan} PLAN`;
+    if (planBtn) {
+      if (currentPlan === 'ULTRA') {
+        planBtn.style.background = 'linear-gradient(135deg, #4f46e5, #7c3aed)';
+      } else if (currentPlan === 'MAX') {
+        planBtn.style.background = 'linear-gradient(135deg, #2563eb, #3b82f6)';
+      } else {
+        planBtn.style.background = 'linear-gradient(135deg, #4b5563, #6b7280)';
+      }
+    }
 
     // Filter sidebar navigation links based on active staff role & permissions
     document.querySelectorAll('.sidebar .nav-item').forEach(item => {
@@ -2212,6 +2230,72 @@ window.iKhataUI = {
               ` : ''}
             </div>
           `).join('')}
+        </div>
+      </div>
+    `);
+  },
+
+  openSubscriptionPlanModal() {
+    const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
+    const isUltra = currentPlan === 'ULTRA';
+
+    this.openModal('👑 Business Subscription Tiers & Upgrades', `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.02)); padding: 14px 18px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.25);">
+          <div>
+            <div style="font-size: 0.78rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Active Business Plan</div>
+            <h3 style="margin: 2px 0 0 0; font-size: 1.25rem; display: flex; align-items: center; gap: 8px;">
+              <span class="badge ${isUltra ? 'badge-ai' : (currentPlan === 'MAX' ? 'badge-primary' : 'badge-neutral')}">${currentPlan} PLAN</span>
+            </h3>
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); text-align: right;">
+            ${isUltra ? '⚡ Attendance Access Control & All Features Unlocked' : '🔒 Upgrade to Ultra Plan (₹199/mo) to unlock Employee Attendance Locking'}
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+          <!-- FREE PLAN -->
+          <div style="border: 2px solid ${currentPlan === 'FREE' ? 'var(--primary)' : 'var(--border-color)'}; border-radius: 12px; padding: 16px; background: var(--bg-card); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="font-size: 1.05rem;">FREE PLAN</strong>
+                <span style="font-weight: 800; color: var(--text-main);">₹0 / mo</span>
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Basic digital ledger & khata entry capabilities for small shopkeepers.</p>
+            </div>
+            <button class="btn btn-sm ${currentPlan === 'FREE' ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px;" ${currentPlan === 'FREE' ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('FREE'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('✅ Plan switched to Free Plan (₹0)', 'success'); window.iKhataUI.refresh();">
+              ${currentPlan === 'FREE' ? '✓ Active Plan' : 'Switch to Free'}
+            </button>
+          </div>
+
+          <!-- MAX PLAN -->
+          <div style="border: 2px solid ${currentPlan === 'MAX' ? 'var(--primary)' : 'var(--border-color)'}; border-radius: 12px; padding: 16px; background: var(--bg-card); display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="font-size: 1.05rem; color: var(--primary);">MAX PLAN</strong>
+                <span style="font-weight: 800; color: var(--primary);">₹99 / mo</span>
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Automated WhatsApp reminders, thermal POS printing & basic inventory.</p>
+            </div>
+            <button class="btn btn-sm ${currentPlan === 'MAX' ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px;" ${currentPlan === 'MAX' ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('MAX'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('✅ Plan switched to Max Plan (₹99/mo)', 'success'); window.iKhataUI.refresh();">
+              ${currentPlan === 'MAX' ? '✓ Active Plan' : 'Select Max (₹99)'}
+            </button>
+          </div>
+
+          <!-- ULTRA PLAN -->
+          <div style="border: 2px dashed ${isUltra ? '#4f46e5' : '#818cf8'}; border-radius: 12px; padding: 16px; background: linear-gradient(135deg, rgba(79,70,229,0.08), rgba(99,102,241,0.02)); display: flex; flex-direction: column; justify-content: space-between; position: relative;">
+            <div style="position: absolute; top: -10px; right: 12px; background: #4f46e5; color: white; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; text-transform: uppercase;">Featured</div>
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="font-size: 1.05rem; color: #4f46e5;">ULTRA PLAN</strong>
+                <span style="font-weight: 800; color: #4f46e5;">₹199 / mo</span>
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">Multi-Staff Access, Advanced POS & <strong>Exclusive Employee Attendance Access Control System</strong>.</p>
+            </div>
+            <button class="btn btn-sm ${isUltra ? 'btn-primary' : 'btn-outline'}" style="width: 100%; margin-top: 14px; ${isUltra ? 'background: #4f46e5;' : ''}" ${isUltra ? 'disabled' : ''} onclick="window.iKhataStore.setSubscriptionPlan('ULTRA'); window.iKhataUI.closeModal(); window.iKhataUI.showToast('⚡ Upgrade successful! Active Plan: ULTRA PLAN (₹199/mo)', 'success'); window.iKhataUI.refresh();">
+              ${isUltra ? '⚡ Active Ultra Plan' : 'Upgrade to Ultra (₹199)'}
+            </button>
+          </div>
         </div>
       </div>
     `);

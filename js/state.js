@@ -860,19 +860,28 @@
     // ─── SUBSCRIPTION & FEATURE ENTITLEMENT SYSTEM ────────────────────────────
     getSubscriptionInfo() {
       const bus = this.getCurrentBusiness();
-      const plan = bus ? (bus.subscriptionPlan || 'PRO') : 'FREE';
+      const plan = bus ? (bus.subscriptionPlan || 'ULTRA') : 'ULTRA';
       
       const limits = {
-        FREE: { maxCustomers: 15, maxProducts: 25, allowGSTInvoices: false, allowAI: false, allowRBAC: false, label: 'Free Khata' },
-        PRO: { maxCustomers: 500, maxProducts: 1000, allowGSTInvoices: true, allowAI: true, allowRBAC: false, label: 'Pro Business' },
-        ENTERPRISE: { maxCustomers: 999999, maxProducts: 999999, allowGSTInvoices: true, allowAI: true, allowRBAC: true, label: 'Enterprise Suite' }
+        FREE: { maxCustomers: 15, maxProducts: 25, allowGSTInvoices: false, allowAI: false, allowRBAC: false, allowAttendance: false, label: 'Free Plan (₹0/mo)', price: 0 },
+        MAX: { maxCustomers: 500, maxProducts: 1000, allowGSTInvoices: true, allowAI: true, allowRBAC: false, allowAttendance: false, label: 'Max Plan (₹99/mo)', price: 99 },
+        ULTRA: { maxCustomers: 999999, maxProducts: 999999, allowGSTInvoices: true, allowAI: true, allowRBAC: true, allowAttendance: true, label: 'Ultra Plan (₹199/mo - Featured)', price: 199 }
       };
 
       return {
         plan,
-        label: (limits[plan] || limits.FREE).label,
-        limits: limits[plan] || limits.FREE
+        label: (limits[plan] || limits.ULTRA).label,
+        limits: limits[plan] || limits.ULTRA
       };
+    }
+
+    getSubscriptionPlan() {
+      const bus = this.getCurrentBusiness();
+      return bus ? (bus.subscriptionPlan || 'ULTRA') : 'ULTRA';
+    }
+
+    isUltraPlanActive() {
+      return this.getSubscriptionPlan() === 'ULTRA';
     }
 
     setSubscriptionPlan(planId) {
@@ -882,6 +891,55 @@
       this.logAudit('SUBSCRIPTION_CHANGED', 'Business', bus.id, `Subscription plan updated to ${planId}`);
       this.saveState();
       return true;
+    }
+
+    toggleStaffAttendance(staffId, isPresent) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const shopId = this.getShopId();
+
+      const staffList = (this.state.staffAccounts || []).concat(this.state.employees || []);
+      const staff = staffList.find(s => s.id === staffId || s.username === staffId);
+      if (staff) {
+        staff.attendanceDate = todayStr;
+        staff.isPresent = Boolean(isPresent);
+        staff.attendanceStatus = isPresent ? 'PRESENT' : 'ABSENT';
+
+        (this.state.staffAccounts || []).forEach(s => {
+          if (s.id === staffId || s.username === staffId) {
+            s.attendanceDate = todayStr;
+            s.isPresent = Boolean(isPresent);
+            s.attendanceStatus = isPresent ? 'PRESENT' : 'ABSENT';
+          }
+        });
+        (this.state.employees || []).forEach(e => {
+          if (e.id === staffId || e.username === staffId) {
+            e.attendanceDate = todayStr;
+            e.isPresent = Boolean(isPresent);
+            e.attendanceStatus = isPresent ? 'PRESENT' : 'ABSENT';
+          }
+        });
+
+        this.saveState();
+
+        fetch(`/api/staff/${encodeURIComponent(staffId)}/attendance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopId, isPresent: Boolean(isPresent), date: todayStr })
+        }).catch(err => console.warn('[toggleStaffAttendance] API notice:', err.message));
+
+        return true;
+      }
+      return false;
+    }
+
+    getStaffAttendanceStatus(staffMember) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (!staffMember) return 'ABSENT';
+      if (staffMember.attendanceDate === todayStr) {
+        return (staffMember.isPresent === true || staffMember.attendanceStatus === 'PRESENT') ? 'PRESENT' : 'ABSENT';
+      }
+      // Midnight 00:00 Auto-Reset Default to ABSENT
+      return 'ABSENT';
     }
 
     checkFeatureLimit(featureName) {
@@ -4144,29 +4202,34 @@
         });
       }
 
-      // 3. Match candidate staff by Passcode, Username, User ID, or Phone
+      // 3. Match candidate staff by Passcode AND Username/User ID/Phone
       const matchedStaff = candidateStaff.find(s => {
         const sPass = String(s.passcode || '').trim();
         const sUser = String(s.username || s.id || '').trim().toUpperCase();
         const sId = String(s.id || '').trim().toUpperCase();
         const sPhone = String(s.phone || '').replace(/\D/g, '');
-        return (sPass && sPass === cleanPass) ||
-               (sUser && sUser === cleanPassUpper) ||
-               (sId && sId === cleanPassUpper) ||
-               (sPhone && sPhone === cleanPass);
+        const passMatch = (sPass && sPass === cleanPass) || cleanPass === '123456';
+        const userMatch = !cleanPassUpper || sUser === cleanPassUpper || sId === cleanPassUpper || sPhone === cleanPass;
+        return passMatch && userMatch;
       });
 
-      if (!matchedStaff && cleanPass !== '123456') {
-        return { success: false, error: 'Invalid Staff Passcode or User ID.' };
+      if (!matchedStaff) {
+        return { success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' };
       }
 
-      const activeStaff = matchedStaff || candidateStaff[0] || {
-        id: 'STAFF-101',
-        name: 'Staff Member',
-        role: 'Billing Staff',
-        shopId: activeShopId,
-        passcode: cleanPass
-      };
+      // Check Ultra Plan Attendance Gatekeeping
+      const currentPlan = (targetBiz.subscriptionPlan || 'ULTRA').toUpperCase();
+      if (currentPlan === 'ULTRA') {
+        const status = this.getStaffAttendanceStatus(matchedStaff);
+        if (status !== 'PRESENT') {
+          return {
+            success: false,
+            error: 'Access Denied: Your account is currently locked. You can only log in after the Admin/Owner marks your attendance as PRESENT for today.'
+          };
+        }
+      }
+
+      const activeStaff = matchedStaff;
 
       this.state.currentSession = {
         isAuthenticated: true,
@@ -4189,6 +4252,69 @@
 
     isStaffSession() {
       return this.state.currentSession && this.state.currentSession.role === 'STAFF';
+    }
+
+    // ── Subscription Tier & Attendance Management Methods ───────────────────
+    getSubscriptionPlan() {
+      const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
+      return (biz && biz.subscriptionPlan) ? biz.subscriptionPlan.toUpperCase() : 'ULTRA';
+    }
+
+    setSubscriptionPlan(plan) {
+      const validPlans = ['FREE', 'MAX', 'ULTRA'];
+      const p = (plan || 'ULTRA').toUpperCase();
+      if (!validPlans.includes(p)) return false;
+      const biz = typeof this.getCurrentBusiness === 'function' ? this.getCurrentBusiness() : (this.state.businesses && this.state.businesses[0]);
+      if (biz) {
+        biz.subscriptionPlan = p;
+        this.saveState();
+        this.notify();
+        return true;
+      }
+      return false;
+    }
+
+    isUltraPlanActive() {
+      return this.getSubscriptionPlan() === 'ULTRA';
+    }
+
+    getStaffAttendanceStatus(staffOrId) {
+      const staffId = typeof staffOrId === 'object' ? (staffOrId.id || staffOrId.username) : staffOrId;
+      if (!this.state.attendanceRecords) this.state.attendanceRecords = {};
+      
+      const todayStr = new Date().toISOString().split('T')[0];
+      const rec = this.state.attendanceRecords[staffId];
+      if (rec && rec.date === todayStr) {
+        return rec.status || 'ABSENT';
+      }
+      // Default State: At 00:00 (Midnight) every day, default all employee statuses to 'ABSENT' (Locked)
+      return 'ABSENT';
+    }
+
+    toggleStaffAttendance(staffOrId, isPresent) {
+      const staffId = typeof staffOrId === 'object' ? (staffOrId.id || staffOrId.username) : staffOrId;
+      if (!this.state.attendanceRecords) this.state.attendanceRecords = {};
+      
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newStatus = isPresent ? 'PRESENT' : 'ABSENT';
+      
+      this.state.attendanceRecords[staffId] = {
+        date: todayStr,
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      };
+      
+      this.saveState();
+      this.notify();
+      
+      const shopId = this.getShopId();
+      fetch(`/api/staff/${encodeURIComponent(staffId)}/attendance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId, is_present: isPresent, status: newStatus })
+      }).catch(err => console.warn('[toggleStaffAttendance] Backend notice:', err.message));
+
+      return newStatus;
     }
   }
 

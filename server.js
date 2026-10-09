@@ -340,11 +340,43 @@ app.post('/api/auth/verify-otp', (req, res) => {
   }
 });
 
+// POST /api/staff/:id/attendance (Update employee daily attendance status)
+app.post('/api/staff/:id/attendance', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { shopId, isPresent, attendanceStatus, date } = req.body;
+    const cleanShopId = (shopId || '').trim().toUpperCase();
+    const todayStr = date || new Date().toISOString().split('T')[0];
+
+    let found = null;
+    for (const sId in staffStore) {
+      if (!cleanShopId || sId.toUpperCase() === cleanShopId) {
+        const staff = staffStore[sId].find(s => s.id === id || s.username === id);
+        if (staff) {
+          staff.attendanceDate = todayStr;
+          staff.isPresent = Boolean(isPresent);
+          staff.attendanceStatus = isPresent ? 'PRESENT' : 'ABSENT';
+          found = staff;
+          break;
+        }
+      }
+    }
+
+    if (found) {
+      console.log(`[Attendance API] Updated ${found.name} (${found.id}) -> ${found.attendanceStatus} on ${todayStr}`);
+      return res.status(200).json({ success: true, message: 'Attendance status updated', staff: found });
+    }
+    return res.status(404).json({ success: false, error: 'Staff member not found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Staff Authentication & Credential Management Endpoints ─────────────────────
-// 3. POST /api/auth/staff-login (Shop ID + Staff User ID + Passcode — NO OTP & NO ATTENDANCE LOCKS)
+// 3. POST /api/auth/staff-login (Shop ID + Staff User ID + Passcode with Ultra Plan Attendance Check)
 app.post('/api/auth/staff-login', (req, res) => {
   try {
-    const { shopId, staffUserId, passcode } = req.body;
+    const { shopId, staffUserId, passcode, subscriptionPlan } = req.body;
     if (!shopId || (!staffUserId && !passcode)) {
       return res.status(400).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
     }
@@ -355,6 +387,7 @@ app.post('/api/auth/staff-login', (req, res) => {
 
     const shopStaffList = staffStore[cleanShopId] || [];
 
+    // a) CREDENTIAL CHECK
     const staffMember = shopStaffList.find(s => {
       const matchShop = s.shopId && s.shopId.toUpperCase() === cleanShopId;
       const matchPass = (s.passcode && s.passcode === cleanPass) || (cleanPass === '123456');
@@ -365,16 +398,32 @@ app.post('/api/auth/staff-login', (req, res) => {
       return matchShop && matchPass && matchUser;
     });
 
-    if (staffMember) {
-      console.log(`[Staff Login] Successful authentication for ${staffMember.name} (${staffMember.id}) at Shop ${cleanShopId}`);
-      return res.status(200).json({
-        success: true,
-        message: 'Staff Authentication Successful',
-        staff: staffMember
-      });
+    if (!staffMember) {
+      return res.status(401).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
     }
 
-    return res.status(401).json({ success: false, error: 'Invalid Shop ID, Staff ID, or Passcode.' });
+    // b) SUBSCRIPTION CHECK & c) ADMIN ATTENDANCE CHECK
+    const currentPlan = (subscriptionPlan || 'ULTRA').toUpperCase();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    if (currentPlan === 'ULTRA') {
+      const isPresentToday = staffMember.attendanceDate === todayStr && (staffMember.isPresent === true || staffMember.attendanceStatus === 'PRESENT');
+      
+      if (!isPresentToday) {
+        console.warn(`[Staff Login Blocked] ${staffMember.name} is ABSENT / locked on ${todayStr}`);
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Your account is currently locked. You can only log in after the Admin/Owner marks your attendance as PRESENT for today.'
+        });
+      }
+    }
+
+    console.log(`[Staff Login] Successful authentication for ${staffMember.name} (${staffMember.id}) at Shop ${cleanShopId}`);
+    return res.status(200).json({
+      success: true,
+      message: 'Staff Authentication Successful',
+      staff: staffMember
+    });
   } catch (err) {
     console.error('[Staff Login] Error:', err.message);
     return res.status(500).json({ success: false, error: 'Internal server error during staff authentication.' });

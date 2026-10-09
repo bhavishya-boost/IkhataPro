@@ -15,11 +15,14 @@ window.iKhataEmployees = {
     const sortedByCollections = [...employees].sort((a, b) => (b.collections || 0) - (a.collections || 0));
     const collectionChampion = sortedByCollections[0] && (sortedByCollections[0].collections || 0) > 0 ? sortedByCollections[0] : null;
 
+    const currentPlan = window.iKhataStore ? window.iKhataStore.getSubscriptionPlan() : 'ULTRA';
+    const isUltra = currentPlan === 'ULTRA';
+
     return `
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
         <div>
-          <h1 style="font-size: 1.75rem;">Employees & Permissions</h1>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">Manage shop staff, role permissions, and active staff sessions</p>
+          <h1 style="font-size: 1.75rem;">Employees & Attendance Access Control</h1>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Manage shop staff, role permissions, and real-time attendance login locking</p>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
           <button class="btn btn-outline" onclick="window.iKhataEmployees.openStaffSwitchModal()">
@@ -74,10 +77,17 @@ window.iKhataEmployees = {
         </div>
       </div>
 
-      <!-- Staff List & Permissions Table -->
+      <!-- Staff List, Attendance Controls & Permissions Table -->
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">👥 Team Members & Staff Roles</div>
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div class="card-title">👥 Team Members & Daily Attendance Access Control</div>
+          ${!isUltra ? `
+            <span class="badge badge-warning" style="cursor: pointer;" onclick="window.iKhataEmployees.showUltraUpgradeModal()">
+              🔒 Attendance Locking Disabled (Ultra Plan Required)
+            </span>
+          ` : `
+            <span class="badge badge-success">🟢 Ultra Attendance Control Active</span>
+          `}
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -90,17 +100,38 @@ window.iKhataEmployees = {
           ` : employees.map(emp => {
             const hasCustom = emp.permissions && Object.keys(emp.permissions).length > 0;
             const empId = emp.id || emp.name;
+            const attStatus = window.iKhataStore ? window.iKhataStore.getStaffAttendanceStatus(empId) : 'ABSENT';
+            const isPresent = attStatus === 'PRESENT';
+
             return `
               <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px; background: var(--bg-card); transition: all 0.2s ease;">
-                <div style="cursor: pointer; flex: 1; min-width: 200px;" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}')" title="Click to view detailed sales & transactions">
-                  <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="cursor: pointer; flex: 1; min-width: 220px;" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}')" title="Click to view detailed sales & transactions">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <strong style="font-size: 1.05rem; color: var(--primary); text-decoration: underline dotted;">${emp.name}</strong>
                     <span class="badge badge-ai">${emp.role}</span>
                     ${hasCustom ? `<span class="badge badge-warning" style="font-size: 0.75rem;">Custom RBAC</span>` : ''}
+                    
+                    <!-- Daily Attendance Status Badge -->
+                    <span class="badge ${isPresent ? 'badge-success' : 'badge-danger'}" style="font-weight: 700;">
+                      ${isPresent ? '🟢 PRESENT (Login Enabled)' : '🔴 ABSENT (Credentials Locked)'}
+                    </span>
                   </div>
                   <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
-                    <span>📱 ${emp.phone}</span> • <span style="color: var(--primary); font-weight: 600;">👁️ Click for Daily Sales Details</span>
+                    <span>📱 ${emp.phone}</span> • <span>User ID: <strong>${emp.username || emp.id}</strong></span> • <span style="color: var(--primary); font-weight: 600;">👁️ View Sales Details</span>
                   </div>
+                </div>
+
+                <!-- Admin Attendance Control Toggle Button -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  ${isPresent ? `
+                    <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);" onclick="window.iKhataEmployees.handleAttendanceToggle('${empId}', false)">
+                      🔒 Mark Absent (Lock Credentials)
+                    </button>
+                  ` : `
+                    <button class="btn btn-sm btn-primary" style="background: #16a34a; border-color: #16a34a;" onclick="window.iKhataEmployees.handleAttendanceToggle('${empId}', true)">
+                      🔓 Mark Present (Enable Login)
+                    </button>
+                  `}
                 </div>
 
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -681,6 +712,62 @@ window.iKhataEmployees = {
           </button>
           <button class="btn btn-primary" onclick="window.iKhataUI.closeModal();">
             Close
+          </button>
+        </div>
+      </div>
+    `);
+  },
+
+  selectPlan(planName) {
+    if (window.iKhataStore && typeof window.iKhataStore.setSubscriptionPlan === 'function') {
+      window.iKhataStore.setSubscriptionPlan(planName);
+      if (window.iKhataUI) {
+        window.iKhataUI.showToast(`✅ Business Subscription updated to ${planName} Plan!`, 'success');
+        window.iKhataUI.refresh();
+      }
+    }
+  },
+
+  handleAttendanceToggle(empId, isPresent) {
+    if (!window.iKhataStore) return;
+    
+    // Check gatekeeping: Ultra Plan required for daily attendance locking
+    if (!window.iKhataStore.isUltraPlanActive()) {
+      this.showUltraUpgradeModal();
+      return;
+    }
+
+    const newStatus = window.iKhataStore.toggleStaffAttendance(empId, isPresent);
+    const msg = isPresent ? '🟢 Staff marked PRESENT (Credentials Unlocked for Login)!' : '🔴 Staff marked ABSENT (Credentials Locked for Today)!';
+    
+    if (window.iKhataUI) {
+      window.iKhataUI.showToast(msg, isPresent ? 'success' : 'info');
+      window.iKhataUI.refresh();
+    }
+  },
+
+  showUltraUpgradeModal() {
+    if (!window.iKhataUI) return;
+    window.iKhataUI.openModal('🔒 Upgrade to Ultra Plan Required', `
+      <div style="text-align: center; padding: 10px 0;">
+        <div style="font-size: 3rem; margin-bottom: 8px;">👑</div>
+        <h3 style="font-size: 1.3rem; margin-bottom: 8px; color: var(--primary);">Exclusive Ultra Plan Feature</h3>
+        <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
+          The Daily Staff Attendance Access Control & Login Locking system is available exclusively on the <strong>ULTRA PLAN (₹199/month)</strong>.
+        </p>
+        <div style="background: rgba(79, 70, 229, 0.08); padding: 14px; border-radius: 10px; border: 1px solid rgba(79, 70, 229, 0.2); text-align: left; margin-bottom: 20px;">
+          <strong style="display: block; margin-bottom: 6px; color: var(--text-color);">Ultra Plan Perks (₹199/mo):</strong>
+          <ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: var(--text-muted);">
+            <li>🔒 Daily Employee Attendance Access Control & Login Locking</li>
+            <li>👥 Multi-Staff Accounts & Role Permissions</li>
+            <li>🧾 Advanced Thermal Printing POS & Barcode Scanner</li>
+            <li>📊 Detailed Staff Sales & Collections Analytics</li>
+          </ul>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-outline" style="flex: 1;" onclick="window.iKhataUI.closeModal();">Cancel</button>
+          <button class="btn btn-primary" style="flex: 1; background: #4f46e5; border-color: #4f46e5;" onclick="window.iKhataEmployees.selectPlan('ULTRA'); window.iKhataUI.closeModal();">
+            ⚡ Upgrade to Ultra (₹199/mo)
           </button>
         </div>
       </div>
