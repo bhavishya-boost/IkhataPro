@@ -202,11 +202,8 @@ body.staff-mode-active [data-route="pnl"],
 body.staff-mode-active [data-route="expenses"],
 body.staff-mode-active [data-route="suppliers"],
 body.staff-mode-active [data-route="analytics"],
-body.staff-mode-active [data-route="simulator"],
 body.staff-mode-active [data-route="statement-generator"],
 body.staff-mode-active [data-route="collection-map"],
-body.staff-mode-active [data-route="gullak"],
-body.staff-mode-active [data-route="po"],
 body.staff-mode-active [data-route="employees"] {
   display: none !important;
 }

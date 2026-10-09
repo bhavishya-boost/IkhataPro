@@ -74,21 +74,12 @@
         <div>
           <div class="nav-group-label">SMART TOOLS</div>
           <ul class="nav-list">
-            <li class="nav-item staff-hide" data-route="gullak" onclick="window.iKhataGullak.openGullakModal()">
-              <span class="icon">💵</span> Daily Cash Gullak
-            </li>
-            <li class="nav-item staff-hide" data-route="po" onclick="window.iKhataPO.openPOModal()">
-              <span class="icon">🤖</span> AI Supplier PO
-            </li>
             <li class="nav-item staff-hide" data-route="analytics" onclick="window.iKhataUI.navigate('analytics')">
               <span class="icon">📊</span> Reports & AI Forecast
             </li>
             <li class="nav-item staff-hide" data-route="statement-generator"
               onclick="window.iKhataUI.navigate('statement-generator')">
               <span class="icon">🧾</span> Custom Statements & Filters
-            </li>
-            <li class="nav-item staff-hide" data-route="simulator" onclick="window.iKhataUI.navigate('simulator')">
-              <span class="icon">⚙️</span> What-If Simulator
             </li>
             <li class="nav-item staff-hide" data-route="collection-map" onclick="window.iKhataUI.navigate('collection-map')">
               <span class="icon">🗺️</span> Collection Route
@@ -132,10 +123,6 @@
         </div>
 
         <div class="header-right">
-          <button class="icon-btn staff-hide" onclick="window.iKhataGullak.openGullakModal()" title="Daily Cash Gullak Counter">
-            <span>💵</span>
-          </button>
-
           <button class="icon-btn" onclick="window.iKhataUI.openNotificationCenter()" title="Notification Center"
             style="position: relative;">
             <span>🔔</span>
@@ -520,8 +507,6 @@
   <script src="js/state.js"></script>
   <script src="js/modules/onboarding.js"></script>
   <script src="js/modules/pinSecurity.js"></script>
-  <script src="js/modules/cashGullak.js"></script>
-  <script src="js/modules/purchaseOrders.js"></script>
   <script src="js/modules/ptpScheduler.js"></script>
   <script src="js/modules/intelligence.js"></script>
   <script src="js/modules/dashboard.js"></script>
@@ -534,7 +519,6 @@
   <script src="js/modules/expenses.js"></script>
   <script src="js/modules/pnl.js"></script>
   <script src="js/modules/analytics.js"></script>
-  <script src="js/modules/simulator.js"></script>
   <script src="js/modules/collectionMap.js"></script>
   <script src="js/modules/copilot.js"></script>
   <script src="js/modules/voiceKhata.js"></script>

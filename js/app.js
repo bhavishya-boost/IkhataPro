@@ -1073,7 +1073,7 @@ window.iKhataUI = {
       let isAllowed = true;
 
       if (isStaff) {
-        const restrictedRoutes = ['gullak', 'po', 'collection-map', 'analytics', 'statement-generator', 'simulator', 'employees', 'expenses', 'pnl', 'suppliers'];
+        const restrictedRoutes = ['collection-map', 'analytics', 'statement-generator', 'employees', 'expenses', 'pnl', 'suppliers'];
         if (item.classList.contains('staff-hide') || (route && restrictedRoutes.includes(route))) {
           isAllowed = false;
         }
@@ -1088,7 +1088,7 @@ window.iKhataUI = {
 
     // If logged in as staff, check route permission
     if (isStaff) {
-      const restrictedRoutes = ['gullak', 'po', 'collection-map', 'analytics', 'statement-generator', 'simulator', 'employees', 'expenses', 'pnl', 'suppliers'];
+      const restrictedRoutes = ['collection-map', 'analytics', 'statement-generator', 'employees', 'expenses', 'pnl', 'suppliers'];
       if (this.currentRoute === 'dashboard' || restrictedRoutes.includes(this.currentRoute)) {
         container.innerHTML = this.renderStaffDashboard(state);
         return;
@@ -1128,9 +1128,6 @@ window.iKhataUI = {
         break;
       case 'statement-generator':
         container.innerHTML = window.iKhataStatementGenerator.render(state);
-        break;
-      case 'simulator':
-        container.innerHTML = window.iKhataSimulator.render(state);
         break;
       case 'collection-map':
         container.innerHTML = window.iKhataCollectionMap.render(state);
