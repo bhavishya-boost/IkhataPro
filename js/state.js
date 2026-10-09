@@ -963,9 +963,16 @@
     }
 
     getBills(includeDeleted = false) {
-      if (!this.state.posBills && !this.state.bills) this.state.posBills = [];
-      const list = this.state.posBills || this.state.bills || [];
-      return list.filter(b => this.isRecordForActiveBusiness(b) && (includeDeleted || !b.isDeleted));
+      if (!this.state.bills) this.state.bills = [];
+      if (Array.isArray(this.state.posBills) && this.state.posBills.length > 0) {
+        this.state.posBills.forEach(pb => {
+          if (!this.state.bills.some(b => b.id === pb.id)) {
+            this.state.bills.push(pb);
+          }
+        });
+        this.state.posBills = [];
+      }
+      return this.state.bills.filter(b => this.isRecordForActiveBusiness(b) && (includeDeleted || !b.isDeleted));
     }
 
     getInvoices(includeDeleted = false) {
@@ -1882,19 +1889,58 @@
 
       const today = new Date().toISOString().split('T')[0];
       const todayLocal = new Date().toLocaleDateString('en-CA');
-      const isToday = (dStr) => dStr === today || dStr === todayLocal;
+      const isToday = (dStr) => dStr === today || dStr === todayLocal || (typeof dStr === 'string' && (dStr.startsWith(today) || dStr.startsWith(todayLocal)));
 
       const todayBills = this.getBills().filter(b => isToday(b.date));
       const todayTxReceived = this.getTransactions()
         .filter(t => isToday(t.date) && t.type === 'GOT' && !t.isDeleted)
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
+        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
 
-      const billsSales = todayBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
-      const todayInvSales = this.getInvoices().filter(i => isToday(i.date)).reduce((sum, i) => sum + (i.total || 0), 0);
-      const billsReceived = todayBills.filter(b => b.paymentMethod !== 'Credit').reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+      const billsSales = todayBills.reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+      const todayInvSales = this.getInvoices().filter(i => isToday(i.date)).reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+      const todayManualGaveSales = this.getTransactions()
+        .filter(t => isToday(t.date) && t.type === 'GAVE' && !t.isDeleted && (!t.note || !t.note.includes('POS Bill')))
+        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
 
-      bus.todaySales = Math.round((billsSales + todayInvSales) * 100) / 100;
+      const billsReceived = todayBills
+        .filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit'))
+        .reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+
+      bus.todaySales = Math.round((billsSales + todayInvSales + todayManualGaveSales) * 100) / 100;
       bus.todayReceived = Math.round((billsReceived + todayTxReceived) * 100) / 100;
+
+      // Recalculate each employee's sales and collections dynamically
+      const allBusinessBills = this.getBills();
+      const allBusinessTx = this.getTransactions();
+      const allBusinessInvs = this.getInvoices();
+
+      this.getEmployees().forEach(emp => {
+        const empId = emp.id;
+        const empName = (emp.name || '').toLowerCase().trim();
+        const empUsername = (emp.username || '').toLowerCase().trim();
+
+        const matchStaff = (item) => {
+          if (!item) return false;
+          if (item.staffId && (item.staffId === empId || (empUsername && item.staffId.toLowerCase() === empUsername))) return true;
+          if (item.staffName && item.staffName.toLowerCase().trim() === empName) return true;
+          if (item.createdBy && item.createdBy.toLowerCase().trim() === empName) return true;
+          return false;
+        };
+
+        const empBills = allBusinessBills.filter(b => matchStaff(b));
+        const empTx = allBusinessTx.filter(t => matchStaff(t));
+        const empInvs = allBusinessInvs.filter(i => matchStaff(i));
+
+        const empBillsSales = empBills.reduce((s, b) => s + (parseFloat(b.grandTotal) || 0), 0);
+        const empInvsSales = empInvs.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+        const empManualGaveSales = empTx.filter(t => t.type === 'GAVE' && (!t.note || !t.note.includes('POS Bill'))).reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+        const empBillsCashUpi = empBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).reduce((s, b) => s + (parseFloat(b.grandTotal) || 0), 0);
+        const empTxCollected = empTx.filter(t => t.type === 'GOT').reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+        emp.sales = Math.round((empBillsSales + empInvsSales + empManualGaveSales) * 100) / 100;
+        emp.collections = Math.round((empBillsCashUpi + empTxCollected) * 100) / 100;
+      });
 
       this.computeCustomerSegments();
     }
@@ -3694,6 +3740,12 @@
       const now   = new Date();
       const billNo = 'BILL-' + Date.now().toString().slice(-6);
 
+      const activeEmp = this.getCurrentEmployee();
+      const staffUser = this.state.currentSession && this.state.currentSession.user;
+      const staffId = activeEmp ? activeEmp.id : (staffUser ? (staffUser.id || staffUser.username) : 'owner');
+      const staffName = activeEmp ? activeEmp.name : (staffUser ? staffUser.name : 'Owner');
+      const staffRole = activeEmp ? activeEmp.role : (staffUser ? staffUser.role : 'Owner');
+
       const bill = {
         id: billNo,
         business_id: bId,
@@ -3709,6 +3761,10 @@
         source: 'POS',
         date: today,
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        staffId: staffId,
+        staffName: staffName,
+        staffRole: staffRole,
+        createdBy: staffName,
         createdAt: now.toISOString()
       };
 
@@ -3766,13 +3822,6 @@
       }
 
       return bill;
-    }
-
-    getBills(includeDeleted = false) {
-      const bId = this.getActiveBusinessId();
-      if (!this.state.bills) return [];
-      if (includeDeleted) return this.state.bills.filter(b => b.business_id === bId);
-      return this.state.bills.filter(b => b.business_id === bId && !b.isDeleted);
     }
 
     getCustomerBills(customerId) {

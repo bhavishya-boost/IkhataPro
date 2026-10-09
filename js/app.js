@@ -1151,17 +1151,36 @@ window.iKhataUI = {
 
   renderStaffDashboard(state) {
     const todayStr = new Date().toISOString().split('T')[0];
+    const todayLocal = new Date().toLocaleDateString('en-CA');
+    const isToday = (dStr) => dStr === todayStr || dStr === todayLocal || (typeof dStr === 'string' && (dStr.startsWith(todayStr) || dStr.startsWith(todayLocal)));
+
     const dateFormatted = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const currentSession = state.currentSession || {};
     const staffUser = currentSession.user || { name: 'Staff Member', role: 'Billing Staff' };
     const shopId = window.iKhataStore.getShopId();
 
-    // Filter transactions to ONLY today's date
-    const allTx = window.iKhataStore.getTransactions() || [];
-    const todayTx = allTx.filter(t => t.date === todayStr);
+    // Fetch Today's POS Bills
+    const allBills = (window.iKhataStore.getBills ? window.iKhataStore.getBills() : []) || [];
+    const todayBills = allBills.filter(b => isToday(b.date));
 
-    const todaySales = todayTx.reduce((sum, t) => sum + (t.type === 'GAVE' ? Number(t.amount || 0) : 0), 0);
-    const todayCollected = todayTx.reduce((sum, t) => sum + (t.type === 'GOT' ? Number(t.amount || 0) : 0), 0);
+    // Fetch Today's Invoices
+    const allInvs = (window.iKhataStore.getInvoices ? window.iKhataStore.getInvoices() : []) || [];
+    const todayInvs = allInvs.filter(i => isToday(i.date));
+
+    // Fetch Today's Khata Transactions
+    const allTx = (window.iKhataStore.getTransactions ? window.iKhataStore.getTransactions() : []) || [];
+    const todayTx = allTx.filter(t => isToday(t.date));
+
+    // Calculate Accurate Today's Sales (POS + Invoices + Manual Khata Sales)
+    const billsSales = todayBills.reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+    const invsSales = todayInvs.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
+    const manualGaveSales = todayTx.filter(t => t.type === 'GAVE' && (!t.note || !t.note.includes('POS Bill'))).reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+    const todaySales = Math.round((billsSales + invsSales + manualGaveSales) * 100) / 100;
+
+    // Calculate Payments Collected Today (POS Cash/UPI + Khata Jama)
+    const billsCashUpi = todayBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).reduce((sum, b) => sum + (parseFloat(b.grandTotal) || 0), 0);
+    const txCollected = todayTx.filter(t => t.type === 'GOT').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+    const todayCollected = Math.round((billsCashUpi + txCollected) * 100) / 100;
 
     const customers = window.iKhataStore.getCustomers() || [];
 
@@ -1174,6 +1193,9 @@ window.iKhataUI = {
           <div style="font-size: 0.85rem; opacity: 0.9;">Shop ID: <strong style="font-family: monospace; letter-spacing: 1px;">${shopId}</strong> • ${dateFormatted}</div>
         </div>
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="window.iKhataUI.navigate('pos');">
+            🛒 Open POS Billing Counter
+          </button>
           <button class="btn btn-outline" style="color: #ffffff; border-color: rgba(255,255,255,0.4);" onclick="window.iKhataUI.logout();">
             🚪 End Shift / Logout
           </button>
@@ -1192,72 +1214,82 @@ window.iKhataUI = {
       <!-- Today's Shift Metrics Summary Cards -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
         <div class="card" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02)); border-color: rgba(34, 197, 94, 0.3);">
-          <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Today's Sales / Udhar</div>
+          <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Today's Total Sales</div>
           <div style="font-size: 1.8rem; font-weight: 800; color: #16a34a; margin-top: 4px;">₹${todaySales.toLocaleString('en-IN')}</div>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayTx.filter(t => t.type === 'GAVE').length} transactions created today</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayBills.length} POS bills • ${todayTx.filter(t => t.type === 'GAVE').length} Udhar entries</div>
         </div>
 
         <div class="card" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(79, 70, 229, 0.02)); border-color: rgba(79, 70, 229, 0.3);">
           <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Today's Payments Received</div>
           <div style="font-size: 1.8rem; font-weight: 800; color: #4f46e5; margin-top: 4px;">₹${todayCollected.toLocaleString('en-IN')}</div>
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayTx.filter(t => t.type === 'GOT').length} cash payments collected today</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${todayBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).length} Cash/UPI bills • ${todayTx.filter(t => t.type === 'GOT').length} Jama collections</div>
         </div>
       </div>
 
-      <!-- Quick Add Transaction / Ledger Entry Tool for Today -->
-      <div class="card" style="margin-bottom: 24px;">
-        <div class="card-header">
-          <div class="card-title">⚡ Quick Add Today's Transaction / Ledger Entry</div>
-        </div>
-        <form onsubmit="event.preventDefault(); window.iKhataUI.submitAddKhata(this);">
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: flex-end;">
-            <div>
-              <label class="form-label" style="font-size: 0.82rem;">Customer *</label>
-              <select name="customerId" class="form-select" required>
-                <option value="">-- Select Customer --</option>
-                ${customers.map(c => `<option value="${c.id}">${c.name} (${c.phone || ''})</option>`).join('')}
-              </select>
-            </div>
+      <!-- Quick Actions Grid for Staff -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px;">
+        <button class="btn btn-primary btn-lg" style="justify-content: center;" onclick="window.iKhataUI.navigate('pos');">
+          🛒 Open POS Counter
+        </button>
+        <button class="btn btn-outline btn-lg" style="justify-content: center;" onclick="window.iKhataUI.openAddKhataModal('GAVE');">
+          ➕ Give Udhar (Gave)
+        </button>
+        <button class="btn btn-outline btn-lg" style="justify-content: center;" onclick="window.iKhataUI.openAddKhataModal('GOT');">
+          💰 Receive Jama (Got)
+        </button>
+        <button class="btn btn-outline btn-lg" style="justify-content: center;" onclick="window.iKhataUI.openQuickAddCustomerModal();">
+          👥 Add New Customer
+        </button>
+      </div>
 
-            <div>
-              <label class="form-label" style="font-size: 0.82rem;">Type *</label>
-              <select name="type" class="form-select" required>
-                <option value="GAVE">I GAVE (Udhar / Sales)</option>
-                <option value="GOT">I GOT (Payment / Jama)</option>
-              </select>
-            </div>
-
-            <div>
-              <label class="form-label" style="font-size: 0.82rem;">Amount (₹) *</label>
-              <input type="number" name="amount" class="form-input" placeholder="0" required min="1">
-            </div>
-
-            <div>
-              <label class="form-label" style="font-size: 0.82rem;">Note / Details</label>
-              <input type="text" name="note" class="form-input" placeholder="e.g. Daily sales entry">
-            </div>
-
-            <div>
-              <button type="submit" class="btn btn-primary" style="width: 100%;">
-                ➕ Save Today's Entry
-              </button>
-            </div>
+      <!-- Today's POS Bills Generated Table -->
+      ${todayBills.length > 0 ? `
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-title">🧾 Today's POS Bills (${todayBills.length})</div>
+            <span class="badge badge-primary">Total: ₹${billsSales.toLocaleString('en-IN')}</span>
           </div>
-        </form>
-      </div>
+          <div style="overflow-x: auto;">
+            <table class="table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>Bill No</th>
+                  <th>Time</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Payment Mode</th>
+                  <th>Grand Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${todayBills.map(b => `
+                  <tr>
+                    <td><strong>${b.id}</strong></td>
+                    <td>${b.time || 'Today'}</td>
+                    <td>${b.customerName || 'Walk-in Customer'}</td>
+                    <td>${(b.items || []).length} items</td>
+                    <td><span class="badge ${b.paymentMethod === 'Cash' ? 'badge-success' : (b.paymentMethod && b.paymentMethod.includes('Credit') ? 'badge-warning' : 'badge-primary')}">${b.paymentMethod || 'Cash'}</span></td>
+                    <td style="font-weight: 800; color: var(--primary);">₹${Number(b.grandTotal || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
 
       <!-- Today's Transactions Table (ONLY Current Date Records) -->
       <div class="card" style="margin-bottom: 24px;">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-          <div class="card-title">📋 Today's Staff Transactions (${todayTx.length})</div>
+          <div class="card-title">📋 Today's Ledger Entries (${todayTx.length})</div>
           <span class="badge badge-success">Current Date Only</span>
         </div>
 
         ${todayTx.length === 0 ? `
           <div style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
             <div style="font-size: 2.5rem; margin-bottom: 8px;">📝</div>
-            <p style="font-weight: 600; font-size: 1rem; margin-bottom: 4px; color: var(--text-main);">No Transactions Recorded Today</p>
-            <p style="font-size: 0.85rem;">Use the tool above or customer directory to record today's shift entries.</p>
+            <p style="font-weight: 600; font-size: 1rem; margin-bottom: 4px; color: var(--text-main);">No Ledger Transactions Recorded Today</p>
+            <p style="font-size: 0.85rem;">Use the quick action buttons above to record today's shift entries.</p>
           </div>
         ` : `
           <div style="overflow-x: auto;">

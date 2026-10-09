@@ -91,19 +91,27 @@ window.iKhataEmployees = {
             const hasCustom = emp.permissions && Object.keys(emp.permissions).length > 0;
             const empId = emp.id || emp.name;
             return `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px;">
-                <div>
-                  <strong style="font-size: 1rem;">${emp.name}</strong>
-                  <span class="badge badge-ai" style="margin-left: 8px;">${emp.role}</span>
-                  ${hasCustom ? `<span class="badge badge-warning" style="margin-left: 4px; font-size: 0.75rem;">Custom RBAC</span>` : ''}
-                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">📱 ${emp.phone}</div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); flex-wrap: wrap; gap: 12px; background: var(--bg-card); transition: all 0.2s ease;">
+                <div style="cursor: pointer; flex: 1; min-width: 200px;" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}')" title="Click to view detailed sales & transactions">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong style="font-size: 1.05rem; color: var(--primary); text-decoration: underline dotted;">${emp.name}</strong>
+                    <span class="badge badge-ai">${emp.role}</span>
+                    ${hasCustom ? `<span class="badge badge-warning" style="font-size: 0.75rem;">Custom RBAC</span>` : ''}
+                  </div>
+                  <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+                    <span>📱 ${emp.phone}</span> • <span style="color: var(--primary); font-weight: 600;">👁️ Click for Daily Sales Details</span>
+                  </div>
                 </div>
 
-                <div style="display: flex; gap: 12px; align-items: center;">
-                  <div style="text-align: right; font-size: 0.85rem; margin-right: 8px;">
-                    <div>Sales: <strong>${formatCurrency(emp.sales)}</strong></div>
-                    <div style="color: var(--text-muted);">Collections: ${formatCurrency(emp.collections)}</div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <div style="text-align: right; font-size: 0.85rem; margin-right: 8px; cursor: pointer;" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}')">
+                    <div>Total Sales: <strong style="color: #16a34a;">${formatCurrency(emp.sales)}</strong></div>
+                    <div style="color: var(--text-muted);">Collections: <strong style="color: #4f46e5;">${formatCurrency(emp.collections)}</strong></div>
                   </div>
+
+                  <button class="btn btn-primary btn-sm" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}')" title="View Detailed Sales & Filter by Date">
+                    📊 Sales Details
+                  </button>
 
                   <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.switchStaff('${empId}')">
                     👤 Login As
@@ -394,5 +402,288 @@ window.iKhataEmployees = {
     } else {
       window.iKhataUI.showToast('❌ Failed to update passcode.', 'error');
     }
+  },
+
+  openStaffDetailsModal(staffId, activeFilter = 'TODAY', customStartDate = '', customEndDate = '') {
+    const formatCurrency = (amt) => '₹' + Number(amt || 0).toLocaleString('en-IN');
+    const employees = window.iKhataStore ? (window.iKhataStore.getEmployees() || []) : [];
+    const staff = employees.find(e => e.id === staffId || (e.name && e.name.toLowerCase() === String(staffId).toLowerCase()) || (e.username && e.username.toLowerCase() === String(staffId).toLowerCase())) || { name: staffId, role: 'Staff Member', phone: 'N/A' };
+
+    const empId = staff.id || staffId;
+    const empName = (staff.name || '').toLowerCase().trim();
+    const empUsername = (staff.username || '').toLowerCase().trim();
+
+    const allBills = (window.iKhataStore && window.iKhataStore.getBills) ? window.iKhataStore.getBills() : [];
+    const allTx = (window.iKhataStore && window.iKhataStore.getTransactions) ? window.iKhataStore.getTransactions() : [];
+    const allInvs = (window.iKhataStore && window.iKhataStore.getInvoices) ? window.iKhataStore.getInvoices() : [];
+
+    // Helper to match records belonging to this staff member
+    const matchStaff = (item) => {
+      if (!item) return false;
+      if (item.staffId && (item.staffId === empId || (empUsername && item.staffId.toLowerCase() === empUsername))) return true;
+      if (item.staffName && item.staffName.toLowerCase().trim() === empName) return true;
+      if (item.createdBy && item.createdBy.toLowerCase().trim() === empName) return true;
+      // If there's only 1 staff member and createdBy is not set to another staff member
+      if (employees.length === 1 && item.createdByRole !== 'Owner' && !item.createdBy) return true;
+      return false;
+    };
+
+    const staffBills = allBills.filter(b => matchStaff(b));
+    const staffTx = allTx.filter(t => matchStaff(t));
+    const staffInvs = allInvs.filter(i => matchStaff(i));
+
+    // Calculate Date Bounds based on activeFilter
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayLocal = new Date().toLocaleDateString('en-CA');
+    
+    const yestDate = new Date();
+    yestDate.setDate(yestDate.getDate() - 1);
+    const yesterdayStr = yestDate.toISOString().split('T')[0];
+
+    const weekDate = new Date();
+    weekDate.setDate(weekDate.getDate() - 7);
+    const weekStartStr = weekDate.toISOString().split('T')[0];
+
+    const currentMonthStr = todayStr.substring(0, 7); // 'YYYY-MM'
+
+    let dateLabel = 'Today';
+    let filterCondition = (dStr) => dStr === todayStr || dStr === todayLocal || (typeof dStr === 'string' && (dStr.startsWith(todayStr) || dStr.startsWith(todayLocal)));
+
+    if (activeFilter === 'YESTERDAY') {
+      dateLabel = 'Yesterday (' + yesterdayStr + ')';
+      filterCondition = (dStr) => dStr === yesterdayStr || (typeof dStr === 'string' && dStr.startsWith(yesterdayStr));
+    } else if (activeFilter === 'WEEK') {
+      dateLabel = 'Last 7 Days (Since ' + weekStartStr + ')';
+      filterCondition = (dStr) => dStr && dStr >= weekStartStr && dStr <= todayStr;
+    } else if (activeFilter === 'MONTH') {
+      dateLabel = 'This Month (' + currentMonthStr + ')';
+      filterCondition = (dStr) => dStr && dStr.startsWith(currentMonthStr);
+    } else if (activeFilter === 'ALL') {
+      dateLabel = 'All Time History';
+      filterCondition = () => true;
+    } else if (activeFilter === 'CUSTOM') {
+      dateLabel = `Custom: ${customStartDate || 'Start'} to ${customEndDate || 'End'}`;
+      filterCondition = (dStr) => {
+        if (!dStr) return false;
+        const d = dStr.split('T')[0];
+        if (customStartDate && d < customStartDate) return false;
+        if (customEndDate && d > customEndDate) return false;
+        return true;
+      };
+    }
+
+    const filteredBills = staffBills.filter(b => filterCondition(b.date));
+    const filteredTx = staffTx.filter(t => filterCondition(t.date));
+    const filteredInvs = staffInvs.filter(i => filterCondition(i.date));
+
+    // Computations for the selected range
+    const periodBillsSales = filteredBills.reduce((s, b) => s + (parseFloat(b.grandTotal) || 0), 0);
+    const periodInvSales = filteredInvs.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const periodManualGave = filteredTx.filter(t => t.type === 'GAVE' && (!t.note || !t.note.includes('POS Bill'))).reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const totalPeriodSales = Math.round((periodBillsSales + periodInvSales + periodManualGave) * 100) / 100;
+
+    const periodBillsCashUpi = filteredBills.filter(b => !b.paymentMethod || !b.paymentMethod.includes('Credit')).reduce((s, b) => s + (parseFloat(b.grandTotal) || 0), 0);
+    const periodGotCollected = filteredTx.filter(t => t.type === 'GOT').reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const totalPeriodCollections = Math.round((periodBillsCashUpi + periodGotCollected) * 100) / 100;
+
+    const totalOrdersCount = filteredBills.length + filteredInvs.length;
+    const aov = totalOrdersCount > 0 ? Math.round(totalPeriodSales / totalOrdersCount) : 0;
+
+    window.iKhataUI.openModal(`📊 Staff Sales Report: ${staff.name}`, `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Staff Header Profile Card -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(79,70,229,0.08), rgba(99,102,241,0.02)); padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid rgba(99,102,241,0.25); flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 1.4rem; font-weight: 800; display: flex; align-items: center; justify-content: center;">
+              ${staff.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="margin: 0; font-size: 1.25rem;">${staff.name}</h3>
+                <span class="badge badge-ai">${staff.role || 'Billing Staff'}</span>
+              </div>
+              <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+                <span>📱 ${staff.phone || 'N/A'}</span> • 
+                <span>User ID: <strong>${staff.username || staff.id || 'N/A'}</strong></span> • 
+                <span>Shop: <strong>${staff.shopId || window.iKhataStore.getShopId()}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.switchStaff('${empId}')">
+              👤 Login As
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="window.iKhataEmployees.openResetPasswordModal('${empId}', '${staff.name}')">
+              🔑 Reset Passcode
+            </button>
+          </div>
+        </div>
+
+        <!-- Interactive Date Filter Toolbar -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px 14px; border-radius: var(--radius-md);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+            <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
+              📅 Date Filter: <span style="color: var(--primary);">${dateLabel}</span>
+            </div>
+
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button class="btn btn-sm ${activeFilter === 'TODAY' ? 'btn-primary' : 'btn-outline'}" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}', 'TODAY')">
+                Aaj (Today)
+              </button>
+              <button class="btn btn-sm ${activeFilter === 'YESTERDAY' ? 'btn-primary' : 'btn-outline'}" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}', 'YESTERDAY')">
+                Kal (Yesterday)
+              </button>
+              <button class="btn btn-sm ${activeFilter === 'WEEK' ? 'btn-primary' : 'btn-outline'}" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}', 'WEEK')">
+                Last 7 Days
+              </button>
+              <button class="btn btn-sm ${activeFilter === 'MONTH' ? 'btn-primary' : 'btn-outline'}" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}', 'MONTH')">
+                This Month
+              </button>
+              <button class="btn btn-sm ${activeFilter === 'ALL' ? 'btn-primary' : 'btn-outline'}" onclick="window.iKhataEmployees.openStaffDetailsModal('${empId}', 'ALL')">
+                All Time
+              </button>
+            </div>
+          </div>
+
+          <!-- Custom Date Range Form -->
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; pt: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">Custom Date Range:</span>
+            <input type="date" id="staff-filter-from" class="form-input" style="padding: 4px 8px; font-size: 0.82rem; width: auto;" value="${customStartDate || todayStr}">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">to</span>
+            <input type="date" id="staff-filter-to" class="form-input" style="padding: 4px 8px; font-size: 0.82rem; width: auto;" value="${customEndDate || todayStr}">
+            <button class="btn btn-outline btn-sm" onclick="const f=document.getElementById('staff-filter-from').value; const t=document.getElementById('staff-filter-to').value; window.iKhataEmployees.openStaffDetailsModal('${empId}', 'CUSTOM', f, t);">
+              🔍 Filter Date
+            </button>
+          </div>
+        </div>
+
+        <!-- Period Summary Metrics Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+          <div class="card" style="padding: 14px; background: linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02)); border-color: rgba(34,197,94,0.3);">
+            <div style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Sales in Period</div>
+            <div style="font-size: 1.6rem; font-weight: 800; color: #16a34a; margin-top: 2px;">${formatCurrency(totalPeriodSales)}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${filteredBills.length} POS bills + ${filteredInvs.length} invoices</div>
+          </div>
+
+          <div class="card" style="padding: 14px; background: linear-gradient(135deg, rgba(79,70,229,0.08), rgba(79,70,229,0.02)); border-color: rgba(79,70,229,0.3);">
+            <div style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Collections Settled</div>
+            <div style="font-size: 1.6rem; font-weight: 800; color: #4f46e5; margin-top: 2px;">${formatCurrency(totalPeriodCollections)}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${filteredTx.filter(t=>t.type==='GOT').length} cash/jama payments</div>
+          </div>
+
+          <div class="card" style="padding: 14px; background: var(--bg-card);">
+            <div style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Orders Generated</div>
+            <div style="font-size: 1.6rem; font-weight: 800; color: var(--text-main); margin-top: 2px;">${totalOrdersCount}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Avg Order: ${formatCurrency(aov)}</div>
+          </div>
+
+          <div class="card" style="padding: 14px; background: var(--bg-card);">
+            <div style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">Ledger Udhar Entries</div>
+            <div style="font-size: 1.6rem; font-weight: 800; color: var(--danger); margin-top: 2px;">${formatCurrency(periodManualGave)}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${filteredTx.filter(t=>t.type==='GAVE').length} Udhar entries</div>
+          </div>
+        </div>
+
+        <!-- Section 1: Detailed POS Bills Table -->
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <div class="card-header" style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);">
+            <div class="card-title" style="font-size: 1rem;">🧾 POS & Sales Bills Generated (${filteredBills.length})</div>
+            <span class="badge badge-primary">Total: ${formatCurrency(periodBillsSales)}</span>
+          </div>
+
+          ${filteredBills.length === 0 ? `
+            <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.88rem;">
+              Iss date range me koi POS bill generate nahi hua.
+            </div>
+          ` : `
+            <div style="max-height: 240px; overflow-y: auto;">
+              <table class="table" style="width: 100%; font-size: 0.86rem;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                    <th>Bill No</th>
+                    <th>Date & Time</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Pay Mode</th>
+                    <th style="text-align: right;">Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filteredBills.map(b => `
+                    <tr>
+                      <td><strong>${b.id}</strong></td>
+                      <td>${b.date || ''} <span style="font-size: 0.78rem; color: var(--text-muted);">${b.time || ''}</span></td>
+                      <td>${b.customerName || 'Walk-in Customer'}</td>
+                      <td>${(b.items || []).map(i => `${i.name} (x${i.qty})`).join(', ') || 'Items'}</td>
+                      <td>
+                        <span class="badge ${b.paymentMethod === 'Cash' ? 'badge-success' : (b.paymentMethod && b.paymentMethod.includes('Credit') ? 'badge-warning' : 'badge-primary')}">
+                          ${b.paymentMethod || 'Cash'}
+                        </span>
+                      </td>
+                      <td style="text-align: right; font-weight: 800; color: var(--primary);">${formatCurrency(b.grandTotal)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+
+        <!-- Section 2: Detailed Khata Transactions Table -->
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <div class="card-header" style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);">
+            <div class="card-title" style="font-size: 1rem;">📋 Khata / Ledger Entries (${filteredTx.length})</div>
+            <span class="badge badge-neutral">${filteredTx.filter(t=>t.type==='GAVE').length} Udhar • ${filteredTx.filter(t=>t.type==='GOT').length} Jama</span>
+          </div>
+
+          ${filteredTx.length === 0 ? `
+            <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.88rem;">
+              Iss date range me koi ledger entry add nahi hui.
+            </div>
+          ` : `
+            <div style="max-height: 240px; overflow-y: auto;">
+              <table class="table" style="width: 100%; font-size: 0.86rem;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                    <th>Date & Time</th>
+                    <th>Customer</th>
+                    <th>Type</th>
+                    <th>Note / Mode</th>
+                    <th style="text-align: right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filteredTx.map(t => `
+                    <tr>
+                      <td>${t.date || ''} <span style="font-size: 0.78rem; color: var(--text-muted);">${t.time || ''}</span></td>
+                      <td><strong>${t.customerName || 'Customer'}</strong></td>
+                      <td>
+                        <span class="badge ${t.type === 'GAVE' ? 'badge-danger' : 'badge-success'}">
+                          ${t.type === 'GAVE' ? '🔴 GAVE (Udhar)' : '🟢 GOT (Jama)'}
+                        </span>
+                      </td>
+                      <td>${t.note || t.mode || 'Cash'}</td>
+                      <td style="text-align: right; font-weight: 800; color: ${t.type === 'GAVE' ? 'var(--danger)' : 'var(--success)'};">
+                        ${t.type === 'GAVE' ? '+' : '-'}${formatCurrency(t.amount)}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+          <button class="btn btn-outline" onclick="window.print();">
+            🖨️ Print Report
+          </button>
+          <button class="btn btn-primary" onclick="window.iKhataUI.closeModal();">
+            Close
+          </button>
+        </div>
+      </div>
+    `);
   }
 };

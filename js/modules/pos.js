@@ -381,12 +381,15 @@ window.iKhataPOS = {
           </div>
 
           <!-- Checkout Buttons -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px;">
-            <button class="btn btn-success btn-lg" ${this.cart.length === 0 ? 'disabled' : ''} onclick="window.iKhataPOS.completeCheckout('Cash', ${grandTotal})">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 16px;">
+            <button class="btn btn-success btn-lg" style="padding: 10px 6px; font-size: 0.95rem; justify-content: center;" ${this.cart.length === 0 ? 'disabled' : ''} onclick="window.iKhataPOS.completeCheckout('Cash', ${grandTotal})">
               💵 Cash
             </button>
-            <button class="btn btn-primary btn-lg" ${this.cart.length === 0 || (selectedCustObj && selectedCustObj.isBadDebt) ? 'disabled' : ''} onclick="window.iKhataPOS.completeCheckout('UPI / Credit', ${grandTotal})">
-              📲 UPI / Credit
+            <button class="btn btn-primary btn-lg" style="padding: 10px 6px; font-size: 0.95rem; justify-content: center;" ${this.cart.length === 0 ? 'disabled' : ''} onclick="window.iKhataPOS.completeCheckout('UPI', ${grandTotal})">
+              📲 UPI / QR
+            </button>
+            <button class="btn btn-warning btn-lg" style="padding: 10px 6px; font-size: 0.95rem; justify-content: center;" ${this.cart.length === 0 || (selectedCustObj && selectedCustObj.isBadDebt) ? 'disabled' : ''} onclick="window.iKhataPOS.completeCheckout('Credit', ${grandTotal})">
+              📒 Khata
             </button>
           </div>
         </div>
@@ -397,9 +400,14 @@ window.iKhataPOS = {
   completeCheckout(method, total) {
     if (this.cart.length === 0) return;
 
+    if (method === 'Credit' && !this.selectedCustomer) {
+      window.iKhataUI.showToast('⚠️ Please select a Customer above to bill as Khata / Credit!', 'warning');
+      return;
+    }
+
     const selectedCustObj = window.iKhataStore.getCustomers().find(function(c) { return c.id === window.iKhataPOS.selectedCustomer; });
     if (method.includes('Credit') && selectedCustObj && selectedCustObj.isBadDebt) {
-      window.iKhataUI.showToast('\uD83D\uDED1 Credit Frozen! Cash payment required.', 'danger');
+      window.iKhataUI.showToast('🛑 Credit Frozen! Cash / UPI payment required.', 'danger');
       return;
     }
 
@@ -409,7 +417,7 @@ window.iKhataPOS = {
     const taxAmt       = Math.round(taxable * (this.taxRate / 100));
     const grandTotal   = taxable + taxAmt;
 
-    // Save bill to central store
+    // Save bill to central store (this also triggers recalculateTotals & state save)
     const bill = window.iKhataStore.savePOSBill({
       orderId:       this.loadedOnlineOrderId || null,
       customerId:    this.selectedCustomer || null,
@@ -423,19 +431,10 @@ window.iKhataPOS = {
     });
 
     this.loadedOnlineOrderId = null;
+    this.cart = [];
+    this.selectedCustomer = '';
 
-    // If credit/khata payment and customer selected, also log a khata entry
-    if (method.includes('Credit') && this.selectedCustomer) {
-      window.iKhataStore.addKhataTransaction({
-        customerId: this.selectedCustomer,
-        type: 'GAVE',
-        amount: grandTotal,
-        note: 'POS Sale — Bill ' + bill.id,
-        mode: 'Credit/Khata'
-      });
-    }
-
-    const formatCurrency = function(amt) { return '\u20B9' + Number(amt || 0).toLocaleString('en-IN'); };
+    const formatCurrency = function(amt) { return '₹' + Number(amt || 0).toLocaleString('en-IN'); };
 
     // Show receipt modal
     window.iKhataUI.openModal('\uD83E\uDFBE Bill Receipt — ' + bill.id, `
